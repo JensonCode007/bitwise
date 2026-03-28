@@ -1,11 +1,12 @@
 import './assets/main.css'
-
-import { StrictMode } from 'react'
+import './assets/base.css'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-)
+const container = document.getElementById('root')
+if (container) {
+  const root = createRoot(container)
+  root.render(<App />)
+} else {
+  document.body.innerHTML = '<h1 style="color:red">ROOT NOT FOUND!</h1>'
+}
