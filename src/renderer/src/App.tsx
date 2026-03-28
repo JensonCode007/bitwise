@@ -17,7 +17,7 @@ export default function App() {
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
@@ -49,6 +49,10 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') {
         e.preventDefault()
         setTerminalOpen((prev) => !prev)
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') {
+        e.preventDefault()
+        setSidebarOpen((prev) => !prev)
       }
     }
     window.addEventListener('keydown', handleKeyDown)

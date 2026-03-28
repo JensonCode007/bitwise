@@ -1,16 +1,16 @@
-import { Share2 } from 'lucide-react';
+import { Share2 } from 'lucide-react'
 
 interface ToolbarProps {
-  onCollaborativeClick: () => void;
-  activeView: 'code' | 'canvas';
-  onViewChange: (view: 'code' | 'canvas') => void;
+  onCollaborativeClick: () => void
+  activeView: 'code' | 'canvas'
+  onViewChange: (view: 'code' | 'canvas') => void
 }
 
 export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: ToolbarProps) => {
-  const menus = ['File', 'Edit', 'View', 'Go', 'Run', 'Terminal', 'Help'];
+  const menus = ['File', 'Edit', 'View', 'Go', 'Run', 'Terminal', 'Help']
 
   return (
-    <div className="h-12 bg-island border border-border rounded-island p-2 flex items-center justify-between mx-4 mt-4 shadow-xl">
+    <div className="h-12 bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl p-2 flex items-center justify-between mx-4 mt-4 shadow-xl relative">
       <div className="flex items-center space-x-4 ml-2">
         {menus.map((menu) => (
           <button
@@ -22,11 +22,13 @@ export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: Tool
         ))}
       </div>
 
-      <div className="flex items-center space-x-2 bg-black/40 p-1 rounded-lg border border-border">
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center space-x-2 bg-black/40 p-1 rounded-lg border border-[#2a2a2a]">
         <button
           onClick={() => onViewChange('code')}
           className={`px-4 py-1 text-xs font-medium rounded-md transition-all ${
-            activeView === 'code' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-white hover:bg-white/5'
+            activeView === 'code'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-gray-500 hover:text-white hover:bg-white/5'
           }`}
         >
           Code Editor
@@ -34,7 +36,9 @@ export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: Tool
         <button
           onClick={() => onViewChange('canvas')}
           className={`px-4 py-1 text-xs font-medium rounded-md transition-all ${
-            activeView === 'canvas' ? 'bg-white/10 text-white shadow-sm' : 'text-gray-500 hover:text-white hover:bg-white/5'
+            activeView === 'canvas'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-gray-500 hover:text-white hover:bg-white/5'
           }`}
         >
           Canvas View
@@ -49,5 +53,5 @@ export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: Tool
         <span>Collaborative View</span>
       </button>
     </div>
-  );
-};
+  )
+}

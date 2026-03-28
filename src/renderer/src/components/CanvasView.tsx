@@ -13,7 +13,6 @@ export const CanvasView = () => {
 
   return (
     <div className="flex-1 w-full h-full bg-island border border-border rounded-island shadow-2xl relative overflow-hidden flex items-center justify-center group">
-      {/* Tool palette */}
       <div className="absolute top-6 left-6 bg-black/60 border border-border backdrop-blur-xl p-1.5 rounded-2xl flex flex-col space-y-1 z-20 shadow-2xl">
         {tools.map((tool, i) => (
           <button
