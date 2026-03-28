@@ -6,6 +6,8 @@ import { CodeEditor } from './components/CodeEditor'
 import { CanvasView } from './components/CanvasView'
 import { Terminal } from './components/Terminal'
 import { CollaborativeModal } from './components/CollaborativeModal'
+import { ChatView } from './components/ChatView'
+import { X } from 'lucide-react'
 
 interface OpenFile {
   path: string
@@ -19,6 +21,7 @@ export default function App() {
   const [activeFileIndex, setActiveFileIndex] = useState<number>(-1)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
 
@@ -54,6 +57,10 @@ export default function App() {
         e.preventDefault()
         setSidebarOpen((prev) => !prev)
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault()
+        setChatOpen((prev) => !prev)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -86,6 +93,13 @@ export default function App() {
           onFileClick={handleFileClick}
         />
 
+        <ChatView
+          onClose={() => setChatOpen(false)}
+          isOpen={chatOpen}
+          onSetupCollab={() => setCollaborativeModalOpen(true)}
+          isCollabSetup={collaborativeModalOpen}
+        />
+
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
           {activeView === 'code' ? (
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -107,9 +121,9 @@ export default function App() {
                           e.stopPropagation()
                           handleCloseFile(index)
                         }}
-                        className="ml-1 hover:text-red-500"
+                        className="pl-3 hover:text-red-500"
                       >
-                        ×
+                        <X size={12} />
                       </span>
                     </button>
                   ))}

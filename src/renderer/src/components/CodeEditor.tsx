@@ -72,12 +72,7 @@ export const CodeEditor = ({ projectPath, openFile }: CodeEditorProps) => {
 
   return (
     <div className="flex-1 w-full h-full overflow-hidden bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl shadow-2xl relative">
-      <div className="absolute top-0 left-0 right-0 h-10 bg-black/40 border-b border-[#2a2a2a] flex items-center px-4 z-10 backdrop-blur-sm">
-        <div className="flex items-center space-x-2 bg-white/5 px-3 py-1 rounded-md border border-white/10">
-          <span className="text-xs text-gray-300 font-medium">{fileName}</span>
-        </div>
-      </div>
-      <div className="pt-10 h-full w-full">
+      <div className="h-full w-full">
         <Editor
           height="100%"
           defaultLanguage={language}
