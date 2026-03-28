@@ -14,6 +14,19 @@ interface OpenFile {
   name: string
 }
 
+interface RecentProject {
+  path: string
+  name: string
+  lastOpened: number
+}
+
+const MAX_RECENT_PROJECTS = 5
+
+const getProjectName = (path: string): string => {
+  const parts = path.split('/')
+  return parts[parts.length - 1] || parts[parts.length - 2] || path
+}
+
 export default function App() {
   const [showIDE, setShowIDE] = useState(false)
   const [projectPath, setProjectPath] = useState<string | null>(null)
@@ -24,6 +37,28 @@ export default function App() {
   const [chatOpen, setChatOpen] = useState(false)
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
+  const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('recentProjects')
+    if (saved) {
+      try {
+        setRecentProjects(JSON.parse(saved))
+      } catch {
+        setRecentProjects([])
+      }
+    }
+  }, [])
+
+  const addRecentProject = (path: string) => {
+    const name = getProjectName(path)
+    const updated = [
+      { path, name, lastOpened: Date.now() },
+      ...recentProjects.filter((p) => p.path !== path)
+    ].slice(0, MAX_RECENT_PROJECTS)
+    setRecentProjects(updated)
+    localStorage.setItem('recentProjects', JSON.stringify(updated))
+  }
 
   const activeFile = activeFileIndex >= 0 ? openFiles[activeFileIndex] : null
 
@@ -69,18 +104,20 @@ export default function App() {
   const handleEnterIde = (path?: string) => {
     if (path) {
       setProjectPath(path)
+      addRecentProject(path)
     }
     setShowIDE(true)
   }
 
   if (!showIDE) {
-    return <WelcomePage onEnterIde={handleEnterIde} />
+    return <WelcomePage onEnterIde={handleEnterIde} recentProjects={recentProjects} />
   }
 
   return (
     <div className="w-full h-screen bg-black gap-4 p-4 flex flex-col overflow-hidden">
       <Toolbar
         onCollaborativeClick={() => setCollaborativeModalOpen(true)}
+        onChatClick={() => setChatOpen((prev) => !prev)}
         activeView={activeView}
         onViewChange={setActiveView}
       />
@@ -91,13 +128,6 @@ export default function App() {
           isOpen={sidebarOpen}
           projectPath={projectPath}
           onFileClick={handleFileClick}
-        />
-
-        <ChatView
-          onClose={() => setChatOpen(false)}
-          isOpen={chatOpen}
-          onSetupCollab={() => setCollaborativeModalOpen(true)}
-          isCollabSetup={collaborativeModalOpen}
         />
 
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -148,6 +178,13 @@ export default function App() {
             projectPath={projectPath}
           />
         </div>
+
+        <ChatView
+          onClose={() => setChatOpen(false)}
+          isOpen={chatOpen}
+          onSetupCollab={() => setCollaborativeModalOpen(true)}
+          isCollabSetup={collaborativeModalOpen}
+        />
       </div>
 
       <CollaborativeModal

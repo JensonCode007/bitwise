@@ -1,18 +1,17 @@
-import {
-  FolderOpen,
-  Plus,
-  Settings,
-  FileCode2,
-  ChevronRight,
-  TerminalSquare,
-  SquarePlus
-} from 'lucide-react'
+import { FolderOpen, Plus, Settings, ChevronRight, TerminalSquare, SquarePlus } from 'lucide-react'
+
+interface RecentProject {
+  path: string
+  name: string
+  lastOpened: number
+}
 
 interface WelcomePageProps {
   onEnterIde: (projectPath?: string) => void
+  recentProjects?: RecentProject[]
 }
 
-const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde }) => {
+const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = [] }) => {
   const handleOpenFolder = async () => {
     const folderPath = await window.api.dialog.openFolder()
     if (folderPath) {
@@ -24,6 +23,20 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde }) => {
     onEnterIde()
   }
 
+  const formatTime = (timestamp: number): string => {
+    const diff = Date.now() - timestamp
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes} min ago`
+    if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`
+    if (days === 1) return 'Yesterday'
+    if (days < 7) return `${days} days ago`
+    return new Date(timestamp).toLocaleDateString()
+  }
+
   return (
     // Outer container: Black background, padding to create the outer "Island" spacing
     <div className="min-h-screen bg-black text-neutral-200 p-4 md:p-6 font-sans flex flex-col gap-6 selection:bg-neutral-800">
@@ -33,7 +46,7 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde }) => {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black">
             <TerminalSquare size={20} strokeWidth={2} />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight text-white">Bitwise IDE</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-white">Bitwise</h1>
         </div>
         <button className="rounded-md p-2 text-neutral-400 hover:bg-neutral-800 hover:text-white transition-colors">
           <Settings size={20} />
@@ -101,38 +114,31 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde }) => {
         {/* Right Column (Recents) - Spans 5 columns */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           <div className="flex-1 rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-8 shadow-2xl">
-            <h2 className="text-xl font-medium tracking-tight text-white mb-6">Recent Projects</h2>
-
+            <h2 className="text-xl font-medium tracking-tight text-white pb-5">Recent Projects</h2>
             <div className="flex flex-col gap-2">
-              {[
-                { name: 'bitwise-client', path: '~/dev/bitwise-client', time: '2 mins ago' },
-                {
-                  name: 'nextjs-dashboard',
-                  path: '~/projects/nextjs-dashboard',
-                  time: 'Yesterday'
-                },
-                { name: 'electron-app', path: '~/dev/electron-app', time: '3 days ago' },
-                { name: 'ui-components', path: '~/design/ui-components', time: 'Last week' }
-              ].map((project, i) => (
-                <button
-                  key={i}
-                  className="group flex items-start justify-between rounded-lg p-3 hover:bg-neutral-900 transition-colors text-left border border-transparent hover:border-neutral-800"
-                >
-                  <div className="flex gap-3">
-                    <FileCode2
-                      size={18}
-                      className="mt-1 text-neutral-500 group-hover:text-white transition-colors"
-                    />
-                    <div>
-                      <h4 className="font-medium text-neutral-300 group-hover:text-white transition-colors">
-                        {project.name}
-                      </h4>
-                      <p className="text-xs text-neutral-600">{project.path}</p>
+              {recentProjects.length === 0 ? (
+                <p className="text-sm text-neutral-500 py-4 text-center">No recent projects</p>
+              ) : (
+                recentProjects.map((project, i) => (
+                  <button
+                    key={i}
+                    onClick={() => onEnterIde(project.path)}
+                    className="group flex items-start justify-between rounded-lg p-3 hover:bg-neutral-900 transition-colors text-left border border-neutral-800"
+                  >
+                    <div className="flex gap-3">
+                      <div>
+                        <h4 className="font-medium text-neutral-300 group-hover:text-white transition-colors">
+                          {project.name}
+                        </h4>
+                        <p className="text-xs text-neutral-600">{project.path}</p>
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-xs text-neutral-600">{project.time}</span>
-                </button>
-              ))}
+                    <span className="text-xs text-neutral-600">
+                      {formatTime(project.lastOpened)}
+                    </span>
+                  </button>
+                ))
+              )}
             </div>
           </div>
         </div>

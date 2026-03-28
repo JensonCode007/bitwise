@@ -1,12 +1,18 @@
-import { Share2 } from 'lucide-react'
+import { Share2, MessageCircle } from 'lucide-react'
 
 interface ToolbarProps {
   onCollaborativeClick: () => void
+  onChatClick: () => void
   activeView: 'code' | 'canvas'
   onViewChange: (view: 'code' | 'canvas') => void
 }
 
-export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: ToolbarProps) => {
+export const Toolbar = ({
+  onCollaborativeClick,
+  onChatClick,
+  activeView,
+  onViewChange
+}: ToolbarProps) => {
   const menus = ['File', 'Edit', 'View', 'Go', 'Run', 'Terminal', 'Help']
 
   return (
@@ -45,13 +51,21 @@ export const Toolbar = ({ onCollaborativeClick, activeView, onViewChange }: Tool
         </button>
       </div>
 
-      <button
-        onClick={onCollaborativeClick}
-        className="flex items-center space-x-2 bg-white text-black px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-lg shadow-white/5"
-      >
-        <Share2 size={14} />
-        <span>Collaborative View</span>
-      </button>
+      <div className="flex items-center space-x-2 mr-2 gap-2">
+        <button
+          onClick={onCollaborativeClick}
+          className="flex items-center space-x-2 bg-white text-black px-4 py-1.5 rounded-lg text-xs font-bold hover:bg-gray-200 transition-colors shadow-lg shadow-white/5"
+        >
+          <Share2 size={14} />
+          <span>Collaborative View</span>
+        </button>
+        <button
+          onClick={onChatClick}
+          className="flex items-center space-x-2 bg-[#1a1a1a] border border-[#2a2a2a] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#252525] transition-colors"
+        >
+          <span>Chat</span>
+        </button>
+      </div>
     </div>
   )
 }

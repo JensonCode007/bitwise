@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, MoreVertical, X, ChevronRight } from 'lucide-react'
+import { ChevronDown, X, ChevronRight } from 'lucide-react'
 
 interface FileEntry {
   name: string
@@ -120,11 +120,8 @@ export const Sidebar = ({ onClose, isOpen, projectPath, onFileClick }: SidebarPr
 
   return (
     <div className="w-64 h-full bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl p-4 flex flex-col shadow-2xl transition-all duration-300">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-1">
-          <button className="p-1 hover:bg-white/5 rounded transition-colors text-gray-500">
-            <MoreVertical size={14} />
-          </button>
+      <div className="flex items-center justify-between">
+        <div className="w-full flex justify-end space-x-1">
           <button
             onClick={onClose}
             className="p-1 hover:bg-red-500/10 hover:text-red-500 rounded transition-colors text-gray-500"

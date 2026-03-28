@@ -10,7 +10,7 @@ const terminals: Map<string, pty.IPty> = new Map()
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
+    width: 1300,
     height: 670,
     show: false,
     frame: false,

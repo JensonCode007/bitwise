@@ -39,20 +39,17 @@ const getLanguage = (filename: string): string => {
 
 export const CodeEditor = ({ projectPath, openFile }: CodeEditorProps) => {
   const [code, setCode] = useState('// Select a file from the sidebar to edit\n')
-  const [fileName, setFileName] = useState('untitled')
   const [language, setLanguage] = useState('typescript')
 
   useEffect(() => {
     if (projectPath) {
       setCode('// Select a file from the sidebar to edit\n')
-      setFileName('welcome')
       setLanguage('typescript')
     }
   }, [projectPath])
 
   useEffect(() => {
     if (openFile) {
-      setFileName(openFile.name)
       setLanguage(getLanguage(openFile.name))
 
       window.api.fs.readFile(openFile.path).then((result) => {
