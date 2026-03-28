@@ -22,6 +22,7 @@ interface ChatMessage {
   userName: string
   content: string
   timestamp: number
+  isSystem?: boolean
 }
 
 interface Room {
@@ -39,8 +40,7 @@ interface SocketData {
 }
 
 const rooms = new Map<string, Room>()
-
-const DEBOUNCE_MS = 1000 // merge changes within 1 second
+const DEBOUNCE_MS = 1000
 
 const io = new Server<any, any, any, SocketData>(server, {
   cors: {
@@ -53,13 +53,11 @@ function computeLineChanges(oldContent: string, newContent: string): FileChange[
   const oldLines = oldContent.split('\n')
   const newLines = newContent.split('\n')
   const changes: FileChange['lineChanges'] = []
-
   const maxLen = Math.max(oldLines.length, newLines.length)
 
   for (let i = 0; i < maxLen; i++) {
     const oldLine = oldLines[i]
     const newLine = newLines[i]
-
     if (oldLine === undefined && newLine !== undefined) {
       changes.push({ line: i + 1, type: 'add', content: newLine })
     } else if (oldLine !== undefined && newLine === undefined) {
@@ -87,6 +85,7 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
         messages: [],
         drawings: []
       })
+      rooms.set(roomId, { users: new Map(), changes: [], messages: [] })
     }
 
     const room = rooms.get(roomId)!
@@ -118,27 +117,21 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       const resolvedName = userName || socket.data.userName || 'Anonymous'
       const now = Date.now()
 
-      // Find the last change for this file by this user
       const lastChangeIdx = room.changes.findLastIndex(
         (c) => c.filePath === filePath && c.userId === socket.id
       )
       const lastChange = lastChangeIdx !== -1 ? room.changes[lastChangeIdx] : null
 
-      // If within debounce window, update the existing change instead of creating a new one
       if (lastChange && now - lastChange.timestamp < DEBOUNCE_MS) {
         lastChange.newContent = newCode
         lastChange.timestamp = now
         lastChange.lineChanges = computeLineChanges(lastChange.oldContent, newCode)
-
-        // Broadcast the updated change
         socket.to(roomId).emit('code-update', { filePath, code: newCode })
         socket.to(roomId).emit('change-made', lastChange)
         return
       }
 
-      // Otherwise create a new change entry
       const lineChanges = computeLineChanges(oldCode || '', newCode)
-
       const change: FileChange = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         filePath,
@@ -152,7 +145,6 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 
       room.changes.push(change)
 
-      // Keep only last 50 changes per file
       const fileChanges = room.changes.filter((c) => c.filePath === filePath)
       if (fileChanges.length > 50) {
         const oldestId = fileChanges[0].id
@@ -170,10 +162,8 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       socket.emit('file-changes', { filePath, changes: [] })
       return
     }
-
     const room = rooms.get(roomId)!
     const fileChanges = room.changes.filter((c) => c.filePath === filePath).slice(-20)
-
     socket.emit('file-changes', { filePath, changes: fileChanges })
   })
 
@@ -182,7 +172,6 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       socket.emit('all-changes', { changes: [] })
       return
     }
-
     const room = rooms.get(roomId)!
     socket.emit('all-changes', { changes: room.changes.slice(-50) })
   })
@@ -199,18 +188,15 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       fileTree: any[]
     }) => {
       if (!rooms.has(roomId)) return
-
       const room = rooms.get(roomId)!
       room.projectPath = projectPath
       room.fileTree = fileTree
-
       socket.to(roomId).emit('project-shared', { projectPath, fileTree })
     }
   )
 
   socket.on('get-project', ({ roomId }: { roomId: string }) => {
     if (!rooms.has(roomId)) return
-
     const room = rooms.get(roomId)!
     if (room.projectPath) {
       socket.emit('project-shared', {
@@ -222,7 +208,6 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 
   socket.on('chat-message', ({ roomId, content }: { roomId: string; content: string }) => {
     if (!rooms.has(roomId)) return
-
     const room = rooms.get(roomId)!
     const user = room.users.get(socket.id)
     if (!user) return
@@ -236,9 +221,7 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     }
 
     room.messages.push(message)
-    if (room.messages.length > 100) {
-      room.messages = room.messages.slice(-100)
-    }
+    if (room.messages.length > 100) room.messages = room.messages.slice(-100)
 
     socket.to(roomId).emit('chat-message', message)
     socket.emit('chat-message-sent', message)
@@ -246,7 +229,6 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 
   socket.on('get-chat-history', ({ roomId }: { roomId: string }) => {
     if (!rooms.has(roomId)) return
-
     const room = rooms.get(roomId)!
     socket.emit('chat-history', { messages: room.messages.slice(-50) })
   })
@@ -272,6 +254,49 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
   })
 
   // --------------------------
+  // ── NEW: assign a file to a user ──────────────────────────────────────────
+  socket.on(
+    'assign-file',
+    ({
+      roomId,
+      filePath,
+      assigneeId,
+      assigneeName
+    }: {
+      roomId: string
+      filePath: string
+      assigneeId: string
+      assigneeName: string
+    }) => {
+      if (!rooms.has(roomId)) return
+      const room = rooms.get(roomId)!
+      const assigner = room.users.get(socket.id)
+      if (!assigner) return
+
+      const fileName = filePath.split('/').pop() ?? filePath
+
+      const systemMessage: ChatMessage = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        userId: 'system',
+        userName: 'system',
+        content: `📌 "${fileName}" has been assigned to ${assigneeName} by ${assigner.name}`,
+        timestamp: Date.now(),
+        isSystem: true
+      }
+
+      room.messages.push(systemMessage)
+      if (room.messages.length > 100) room.messages = room.messages.slice(-100)
+
+      // broadcast to everyone in room including sender
+      io.to(roomId).emit('chat-message', systemMessage)
+      io.to(roomId).emit('file-assigned', {
+        filePath,
+        assigneeId,
+        assigneeName,
+        assignedBy: assigner.name
+      })
+    }
+  )
 
   socket.on('disconnect', () => {
     rooms.forEach((room, roomId) => {
