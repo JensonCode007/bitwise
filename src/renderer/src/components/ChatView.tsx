@@ -43,6 +43,7 @@ export const ChatView = ({
   const [step, setStep] = useState<Step>('idle')
   const [selectedFile, setSelectedFile] = useState<string | null>(null)
   const [fileSearch, setFileSearch] = useState('')
+  const [assignMessage, setAssignMessage] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export const ChatView = ({
     })
 
     const unsubscribeMsg = window.api.collab.onChatMessage((message: Message) => {
+      console.log('Received chat message:', message)
       setMessages((prev) => [...prev, message])
     })
 
@@ -87,6 +89,7 @@ export const ChatView = ({
     setStep('idle')
     setSelectedFile(null)
     setFileSearch('')
+    setAssignMessage('')
   }
 
   const handleSend = () => {
@@ -103,9 +106,33 @@ export const ChatView = ({
   }
 
   const handleAssignFile = (assigneeId: string, assigneeName: string) => {
-    if (!selectedFile || !roomId || !window.api.collab) return
-    window.api.collab.assignFile(roomId, selectedFile, assigneeId, assigneeName)
+    console.log('handleAssignFile called:', {
+      selectedFile,
+      roomId,
+      assigneeId,
+      assigneeName,
+      assignMessage
+    })
+    if (!selectedFile || !roomId) {
+      console.log('Missing selectedFile or roomId')
+      alert('Missing selectedFile or roomId')
+      return
+    }
+    if (!window.api.collab) {
+      console.log('window.api.collab is undefined')
+      alert('window.api.collab is undefined')
+      return
+    }
+    if (!window.api.collab.isConnected()) {
+      console.log('Socket not connected')
+      alert('Socket not connected')
+      return
+    }
+    console.log('Calling assignFile...')
+    window.api.collab.assignFile(roomId, selectedFile, assigneeId, assigneeName, assignMessage)
+    console.log('assignFile called, resetting...')
     resetAssign()
+    alert('File assigned!')
   }
 
   const formatTime = (timestamp: number): string =>
@@ -214,6 +241,15 @@ export const ChatView = ({
             <p className="text-sm text-blue-400 font-medium truncate">
               {selectedFile?.split('/').pop()}
             </p>
+          </div>
+          <div className="px-3 py-2 border-b border-[#1a1a1a]">
+            <input
+              type="text"
+              value={assignMessage}
+              onChange={(e) => setAssignMessage(e.target.value)}
+              placeholder="Add a message (optional)"
+              className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 outline-none focus:border-blue-500/50"
+            />
           </div>
           <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
             {roomUsers.length === 0 ? (

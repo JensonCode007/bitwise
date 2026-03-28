@@ -41,6 +41,8 @@ export default function App() {
   const [roomId, setRoomId] = useState<string | null>(null)
   const [userName, setUserName] = useState<string>('User')
   const [sharedFileTree, setSharedFileTree] = useState<any[]>([])
+  const [localFileTree, setLocalFileTree] = useState<any[]>([])
+  const [roomUsers, setRoomUsers] = useState<{ id: string; name: string }[]>([])
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
 
@@ -66,6 +68,34 @@ export default function App() {
 
     return () => unsubscribe()
   }, [roomId])
+
+  useEffect(() => {
+    if (!roomId || !window.api.collab) return
+
+    const unsubscribeJoined = window.api.collab.onUserJoined((data) => {
+      setRoomUsers((prev) => [...prev, { id: data.userId, name: data.userName }])
+    })
+
+    const unsubscribeLeft = window.api.collab.onUserLeft((user) => {
+      setRoomUsers((prev) => prev.filter((u) => u.id !== user.id))
+    })
+
+    return () => {
+      unsubscribeJoined()
+      unsubscribeLeft()
+    }
+  }, [roomId])
+
+  useEffect(() => {
+    if (!projectPath) {
+      setLocalFileTree([])
+      return
+    }
+
+    window.api.fs.readDirectory(projectPath).then((entries) => {
+      setLocalFileTree(entries || [])
+    })
+  }, [projectPath])
 
   useEffect(() => {
     if (!projectPath || !roomId || !window.api.collab) return
@@ -235,6 +265,8 @@ export default function App() {
           isCollabSetup={!!roomId}
           roomId={roomId}
           userName={userName}
+          fileTree={localFileTree.length > 0 ? localFileTree : sharedFileTree}
+          roomUsers={roomUsers}
         />
 
         <DiffViewer

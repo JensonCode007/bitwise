@@ -65,6 +65,16 @@ interface Window {
       onChatMessage: (callback: (message: any) => void) => () => void
       onChatMessageSent: (callback: (message: any) => void) => () => void
       getChatHistory: (roomId: string) => Promise<any[]>
+      assignFile: (
+        roomId: string,
+        filePath: string,
+        assigneeId: string,
+        assigneeName: string,
+        message?: string
+      ) => void
+      onFileAssigned: (
+        callback: (data: { filePath: string; assigneeId: string; assigneeName: string }) => void
+      ) => () => void
       isConnected: () => boolean
     }
   }

@@ -234,6 +234,28 @@ const api = {
       })
     },
 
+    assignFile: (
+      roomId: string,
+      filePath: string,
+      assigneeId: string,
+      assigneeName: string,
+      message?: string
+    ) => {
+      if (socket && socket.connected) {
+        socket.emit('assign-file', { roomId, filePath, assigneeId, assigneeName, message })
+      }
+    },
+
+    onFileAssigned: (
+      callback: (data: { filePath: string; assigneeId: string; assigneeName: string }) => void
+    ) => {
+      if (socket) {
+        socket.on('file-assigned', callback)
+        return () => socket.off('file-assigned', callback)
+      }
+      return () => {}
+    },
+
     isConnected: (): boolean => {
       return socket && socket.connected
     }

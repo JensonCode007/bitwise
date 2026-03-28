@@ -249,9 +249,20 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     socket.to(roomId).emit('canvas-cleared')
   })
 
-  socket.on('cursor-move', ({ roomId, pointer, userName }: { roomId: string; pointer: { x: number; y: number }; userName: string }) => {
-    socket.to(roomId).emit('cursor-update', { socketId: socket.id, pointer, userName })
-  })
+  socket.on(
+    'cursor-move',
+    ({
+      roomId,
+      pointer,
+      userName
+    }: {
+      roomId: string
+      pointer: { x: number; y: number }
+      userName: string
+    }) => {
+      socket.to(roomId).emit('cursor-update', { socketId: socket.id, pointer, userName })
+    }
+  )
 
   // --------------------------
   // ── NEW: assign a file to a user ──────────────────────────────────────────
@@ -261,25 +272,34 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       roomId,
       filePath,
       assigneeId,
-      assigneeName
+      assigneeName,
+      message
     }: {
       roomId: string
       filePath: string
       assigneeId: string
       assigneeName: string
+      message?: string
     }) => {
       if (!rooms.has(roomId)) return
       const room = rooms.get(roomId)!
       const assigner = room.users.get(socket.id)
       if (!assigner) return
 
+      console.log('assign-file received:', { roomId, filePath, assigneeId, assigneeName, message })
+
       const fileName = filePath.split('/').pop() ?? filePath
+
+      let content = `📌 "${fileName}" has been assigned to ${assigneeName} by ${assigner.name}`
+      if (message && message.trim()) {
+        content += `\n💬 "${message.trim()}"`
+      }
 
       const systemMessage: ChatMessage = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         userId: 'system',
         userName: 'system',
-        content: `📌 "${fileName}" has been assigned to ${assigneeName} by ${assigner.name}`,
+        content,
         timestamp: Date.now(),
         isSystem: true
       }
@@ -288,6 +308,7 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       if (room.messages.length > 100) room.messages = room.messages.slice(-100)
 
       // broadcast to everyone in room including sender
+      console.log('Emitting chat-message:', systemMessage)
       io.to(roomId).emit('chat-message', systemMessage)
       io.to(roomId).emit('file-assigned', {
         filePath,
