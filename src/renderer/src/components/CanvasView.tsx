@@ -7,9 +7,14 @@ const DRAWING_TOOLS = ['Pencil', 'Square', 'Circle', 'Minus']
 
 export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   const canvasRef      = useRef<HTMLCanvasElement>(null)
+  const gridRef        = useRef<HTMLDivElement>(null) // NEW: To move the grid when panning
   const socketRef      = useRef<Socket | null>(null)
   const drawingsRef    = useRef<any[]>([])
-  const snapshotRef    = useRef<ImageData | null>(null)
+  
+  // NEW: The Infinite Canvas "Camera" (X, Y offset and Z for zoom)
+  const cameraRef      = useRef({ x: 0, y: 0, z: 1 })
+  const pendingShapeRef= useRef<any>(null) // Replaces snapshotRef to prevent clipping
+  
   const startPosRef    = useRef({ x: 0, y: 0 })
   const isDrawingRef   = useRef(false)
   const activeToolRef  = useRef('Pencil')
@@ -22,7 +27,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   }
 
   const tools = [
-    { icon: MousePointer2, name: 'Select' },
+    { icon: MousePointer2, name: 'Select' }, // We will use this to PAN the camera!
     { icon: Pencil,        name: 'Pencil' },
     { icon: Square,        name: 'Square' },
     { icon: Circle,        name: 'Circle' },
@@ -31,13 +36,24 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     { icon: Layers,        name: 'Layers' }
   ]
 
-  // ─── Renderer — always reads ctx fresh, never stale ──────────────────────────
-  const applyDrawData = (d: any) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  // NEW: Convert Screen Pixels (Mouse) to World Coordinates (Infinite Space)
+  const getWorldPos = (screenX: number, screenY: number) => {
+    return {
+      x: (screenX - cameraRef.current.x) / cameraRef.current.z,
+      y: (screenY - cameraRef.current.y) / cameraRef.current.z
+    }
+  }
 
+  // NEW: Update the visual grid background to match pan/zoom
+  const updateGrid = () => {
+    if (!gridRef.current) return
+    const { x, y, z } = cameraRef.current
+    gridRef.current.style.backgroundPosition = `${x}px ${y}px`
+    gridRef.current.style.backgroundSize = `${40 * z}px ${40 * z}px`
+  }
+
+  // ─── Renderer — Now supports transformed context ──────────────────────────
+  const applyDrawData = (ctx: CanvasRenderingContext2D, d: any) => {
     ctx.strokeStyle = 'white'
     ctx.lineWidth   = 2
     ctx.lineCap     = 'round'
@@ -45,7 +61,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
     const tool = d.tool ?? 'Pencil'
 
-    if (tool === 'Pencil') {
+    if (tool === 'Pencil' || tool === 'Minus') {
       ctx.beginPath()
       ctx.moveTo(d.x0, d.y0)
       ctx.lineTo(d.x1, d.y1)
@@ -62,31 +78,45 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
       ctx.beginPath()
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
       ctx.stroke()
-    } else if (tool === 'Minus') {
-      ctx.beginPath()
-      ctx.moveTo(d.x0, d.y0)
-      ctx.lineTo(d.x1, d.y1)
-      ctx.stroke()
-      ctx.closePath()
     }
   }
 
-  const clearLocalCanvas = () => {
+  // NEW: The Master Render Loop. Redraws everything from memory instantly.
+  const renderFrame = () => {
     const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height)
-  }
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx) return
 
-  const redrawAll = () => drawingsRef.current.forEach((d) => applyDrawData(d))
+    // 1. Clear physical screen
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.restore()
+
+    // 2. Apply Infinite Camera Transform
+    ctx.save()
+    ctx.translate(cameraRef.current.x, cameraRef.current.y)
+    ctx.scale(cameraRef.current.z, cameraRef.current.z)
+
+    // 3. Draw History
+    drawingsRef.current.forEach((d) => applyDrawData(ctx, d))
+
+    // 4. Draw shape currently being dragged (prevents clipping bugs!)
+    if (pendingShapeRef.current) {
+      applyDrawData(ctx, pendingShapeRef.current)
+    }
+
+    ctx.restore()
+  }
 
   const handleClearCanvas = () => {
     drawingsRef.current = []
-    clearLocalCanvas()
+    pendingShapeRef.current = null
+    renderFrame()
     socketRef.current?.emit('clear-canvas', { roomId })
   }
 
-  // ─── Effect 1: Socket — independent of canvas readiness ──────────────────────
+  // ─── Effect 1: Socket ────────────────────────────────────────────────────────
   useEffect(() => {
     const socket = io('http://localhost:5002')
     socketRef.current = socket
@@ -95,17 +125,18 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
     socket.on('load-canvas', (history: any[]) => {
       drawingsRef.current = history
-      setTimeout(() => history.forEach((d) => applyDrawData(d)), 50)
+      renderFrame()
     })
 
     socket.on('receive-draw', (drawData: any) => {
       drawingsRef.current.push(drawData)
-      applyDrawData(drawData)
+      renderFrame()
     })
 
     socket.on('canvas-cleared', () => {
       drawingsRef.current = []
-      clearLocalCanvas()
+      pendingShapeRef.current = null
+      renderFrame()
     })
 
     return () => {
@@ -114,7 +145,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     }
   }, [roomId, userName])
 
-  // ─── Effect 2: Canvas sizing + resize observer ────────────────────────────────
+  // ─── Effect 2: Canvas sizing & Mouse Wheel Zoom ──────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -122,79 +153,113 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     const setSize = () => {
       canvas.width  = canvas.offsetWidth
       canvas.height = canvas.offsetHeight
-      redrawAll()
+      renderFrame()
     }
 
     setSize()
-
     const observer = new ResizeObserver(setSize)
     observer.observe(canvas)
-    return () => observer.disconnect()
+
+    // Handle Zooming via Mouse Wheel
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault() // Stop page from scrolling
+      const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1
+      const newZ = Math.min(Math.max(cameraRef.current.z * zoomDelta, 0.1), 10) // Clamp zoom
+      
+      // Math to zoom exactly where the mouse is pointing
+      const mouseX = e.offsetX
+      const mouseY = e.offsetY
+      cameraRef.current.x = mouseX - (mouseX - cameraRef.current.x) * (newZ / cameraRef.current.z)
+      cameraRef.current.y = mouseY - (mouseY - cameraRef.current.y) * (newZ / cameraRef.current.z)
+      cameraRef.current.z = newZ
+      
+      updateGrid()
+      renderFrame()
+    }
+
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    return () => {
+      observer.disconnect()
+      canvas.removeEventListener('wheel', handleWheel)
+    }
   }, [])
 
-  // ─── Pointer handlers — all via refs, zero stale-closure risk ────────────────
+  // ─── Pointer handlers ────────────────────────────────────────────────────────
   const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // MAGIC FIX: Bind the mouse to the canvas so it keeps drawing even outside the window!
+    e.currentTarget.setPointerCapture(e.pointerId) 
+    
     const tool = activeToolRef.current
-    if (!DRAWING_TOOLS.includes(tool)) return
-
     const { offsetX, offsetY } = e.nativeEvent
     isDrawingRef.current  = true
-    lastPosRef.current    = { x: offsetX, y: offsetY }
-    startPosRef.current   = { x: offsetX, y: offsetY }
 
-    if (SHAPE_TOOLS.includes(tool)) {
-      const canvas = canvasRef.current
-      const ctx    = canvas?.getContext('2d')
-      if (canvas && ctx) {
-        snapshotRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      }
+    if (tool === 'Select') {
+      // Setup for panning
+      lastPosRef.current = { x: offsetX, y: offsetY }
+      return
     }
+
+    if (!DRAWING_TOOLS.includes(tool)) return
+
+    // Convert to infinite world coordinates before saving
+    const worldPos = getWorldPos(offsetX, offsetY)
+    lastPosRef.current    = worldPos
+    startPosRef.current   = worldPos
   }
 
   const draw = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingRef.current) return
 
-    const tool             = activeToolRef.current
+    const tool = activeToolRef.current
     const { offsetX, offsetY } = e.nativeEvent
-    const canvas           = canvasRef.current
-    const ctx              = canvas?.getContext('2d')
-    if (!ctx) return
+
+    if (tool === 'Select') {
+      // Pan the camera around!
+      cameraRef.current.x += (offsetX - lastPosRef.current.x)
+      cameraRef.current.y += (offsetY - lastPosRef.current.y)
+      lastPosRef.current = { x: offsetX, y: offsetY }
+      updateGrid()
+      renderFrame()
+      return
+    }
+
+    const worldPos = getWorldPos(offsetX, offsetY)
 
     if (tool === 'Pencil') {
-      const drawData = { tool: 'Pencil', x0: lastPosRef.current.x, y0: lastPosRef.current.y, x1: offsetX, y1: offsetY }
-      applyDrawData(drawData)
+      const drawData = { tool: 'Pencil', x0: lastPosRef.current.x, y0: lastPosRef.current.y, x1: worldPos.x, y1: worldPos.y }
       drawingsRef.current.push(drawData)
       socketRef.current?.emit('draw-action', { roomId, drawData })
-      lastPosRef.current = { x: offsetX, y: offsetY }
+      lastPosRef.current = worldPos
+      renderFrame()
     } else if (SHAPE_TOOLS.includes(tool)) {
-      if (snapshotRef.current) ctx.putImageData(snapshotRef.current, 0, 0)
-      applyDrawData({ tool, x0: startPosRef.current.x, y0: startPosRef.current.y, x1: offsetX, y1: offsetY })
+      // Save pending shape to memory so it doesn't clip, then render
+      pendingShapeRef.current = { tool, x0: startPosRef.current.x, y0: startPosRef.current.y, x1: worldPos.x, y1: worldPos.y }
+      renderFrame()
     }
   }
 
-  const stopDrawing = (e: React.PointerEvent<HTMLCanvasElement>, finalize = true) => {
+  const stopDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    // Release the mouse lock
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    
     if (!isDrawingRef.current) return
     isDrawingRef.current = false
 
     const tool = activeToolRef.current
 
-    if (SHAPE_TOOLS.includes(tool)) {
-      if (finalize) {
-        const { offsetX, offsetY } = e.nativeEvent
-        const drawData = { tool, x0: startPosRef.current.x, y0: startPosRef.current.y, x1: offsetX, y1: offsetY }
-        drawingsRef.current.push(drawData)
-        socketRef.current?.emit('draw-action', { roomId, drawData })
-      } else {
-        const canvas = canvasRef.current
-        const ctx    = canvas?.getContext('2d')
-        if (ctx && snapshotRef.current) ctx.putImageData(snapshotRef.current, 0, 0)
-      }
-      snapshotRef.current = null
+    // Finalize the shape
+    if (SHAPE_TOOLS.includes(tool) && pendingShapeRef.current) {
+      drawingsRef.current.push(pendingShapeRef.current)
+      socketRef.current?.emit('draw-action', { roomId, drawData: pendingShapeRef.current })
+      pendingShapeRef.current = null
+      renderFrame()
     }
   }
 
   return (
     <div className="flex-1 w-full h-full bg-island border border-border rounded-island shadow-2xl relative overflow-hidden flex items-center justify-center group">
+      
+      {/* Toolbar */}
       <div className="absolute top-6 left-6 bg-black/60 border border-border backdrop-blur-xl p-1.5 rounded-2xl flex flex-col space-y-1 z-20 shadow-2xl">
         {tools.map((tool) => (
           <button
@@ -205,6 +270,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
                 ? 'bg-white text-black shadow-lg shadow-white/10 scale-105'
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
+            title={tool.name}
           >
             <tool.icon size={18} strokeWidth={activeTool === tool.name ? 2.5 : 2} />
           </button>
@@ -223,21 +289,22 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
       {/* Grid background */}
       <div
-        className="absolute inset-0 opacity-10"
+        ref={gridRef}
+        className="absolute inset-0 opacity-10 pointer-events-none"
         style={{
           backgroundImage: 'radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)',
-          backgroundSize: '40px 40px'
+          backgroundSize: '40px 40px',
+          backgroundPosition: '0px 0px'
         }}
       />
 
       <canvas
         ref={canvasRef}
         className="w-full h-full absolute inset-0 z-10 touch-none"
-        style={{ cursor: DRAWING_TOOLS.includes(activeTool) ? 'crosshair' : 'default' }}
+        style={{ cursor: activeTool === 'Select' ? 'grab' : (DRAWING_TOOLS.includes(activeTool) ? 'crosshair' : 'default') }}
         onPointerDown={startDrawing}
         onPointerMove={draw}
-        onPointerUp={(e)  => stopDrawing(e, true)}
-        onPointerOut={(e) => stopDrawing(e, false)}
+        onPointerUp={stopDrawing}
       />
     </div>
   )
