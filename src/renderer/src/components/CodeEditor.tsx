@@ -45,6 +45,7 @@ export const CodeEditor = ({ projectPath, openFile, roomId, userName }: CodeEdit
   const [activeFilePath, setActiveFilePath] = useState<string | null>(null)
   const editorRef = useRef<any>(null)
   const isRemoteUpdate = useRef(false)
+  const codeRef = useRef('// Select a file from the sidebar to edit\n')
 
   useEffect(() => {
     if (projectPath) {
@@ -65,6 +66,7 @@ export const CodeEditor = ({ projectPath, openFile, roomId, userName }: CodeEdit
             const content = atob(result.content)
             isRemoteUpdate.current = true
             setCode(content)
+            codeRef.current = content
             isRemoteUpdate.current = false
           } catch {
             setCode('// Unable to decode file content\n')
@@ -83,6 +85,7 @@ export const CodeEditor = ({ projectPath, openFile, roomId, userName }: CodeEdit
       if (data.filePath === activeFilePath) {
         isRemoteUpdate.current = true
         setCode(data.code)
+        codeRef.current = data.code
         isRemoteUpdate.current = false
       }
     })
@@ -93,10 +96,11 @@ export const CodeEditor = ({ projectPath, openFile, roomId, userName }: CodeEdit
   const handleCodeChange = (value: string | undefined) => {
     if (!value || isRemoteUpdate.current) return
 
+    const oldCode = codeRef.current
+    codeRef.current = value
     setCode(value)
 
     if (roomId && activeFilePath && window.api.collab) {
-      const oldCode = code
       window.api.collab.sendCodeChange(roomId, activeFilePath, oldCode, value, userName || 'User')
     }
   }
