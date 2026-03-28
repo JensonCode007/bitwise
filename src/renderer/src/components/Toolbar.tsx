@@ -1,4 +1,4 @@
-import { Share2, MessageCircle } from 'lucide-react'
+import { Share2, MessageSquare } from 'lucide-react'
 
 interface ToolbarProps {
   onCollaborativeClick: () => void
@@ -63,6 +63,7 @@ export const Toolbar = ({
           onClick={onChatClick}
           className="flex items-center space-x-2 bg-[#1a1a1a] border border-[#2a2a2a] text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-[#252525] transition-colors"
         >
+          <MessageSquare size={14} />
           <span>Chat</span>
         </button>
       </div>

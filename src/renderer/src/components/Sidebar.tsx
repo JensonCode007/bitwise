@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, X, ChevronRight } from 'lucide-react'
+import { ChevronDown, X, ChevronRight, FileDiff } from 'lucide-react'
 
 interface FileEntry {
   name: string
@@ -15,9 +15,16 @@ export interface SidebarProps {
   isOpen: boolean
   projectPath: string | null
   onFileClick?: (path: string, name: string) => void
+  onDiffViewerClick?: () => void
 }
 
-export const Sidebar = ({ onClose, isOpen, projectPath, onFileClick }: SidebarProps) => {
+export const Sidebar = ({
+  onClose,
+  isOpen,
+  projectPath,
+  onFileClick,
+  onDiffViewerClick
+}: SidebarProps) => {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
@@ -140,6 +147,16 @@ export const Sidebar = ({ onClose, isOpen, projectPath, onFileClick }: SidebarPr
           <div className="text-xs text-gray-500 p-2">No folder opened</div>
         )}
       </div>
+
+      {projectPath && (
+        <button
+          onClick={onDiffViewerClick}
+          className="flex items-center space-x-2 w-full px-3 py-2 mt-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors border-t border-[#2a2a2a]"
+        >
+          <FileDiff size={14} />
+          <span>Diff Viewer</span>
+        </button>
+      )}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import { CanvasView } from './components/CanvasView'
 import { Terminal } from './components/Terminal'
 import { CollaborativeModal } from './components/CollaborativeModal'
 import { ChatView } from './components/ChatView'
+import { DiffViewer } from './components/DiffViewer'
 import { X } from 'lucide-react'
 
 interface OpenFile {
@@ -35,7 +36,9 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [diffViewerOpen, setDiffViewerOpen] = useState(false)
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
+  const [roomId, setRoomId] = useState<string | null>(null)
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
 
@@ -128,6 +131,7 @@ export default function App() {
           isOpen={sidebarOpen}
           projectPath={projectPath}
           onFileClick={handleFileClick}
+          onDiffViewerClick={() => setDiffViewerOpen(true)}
         />
 
         <div className="flex-1 flex flex-col gap-4 overflow-hidden">
@@ -183,13 +187,20 @@ export default function App() {
           onClose={() => setChatOpen(false)}
           isOpen={chatOpen}
           onSetupCollab={() => setCollaborativeModalOpen(true)}
-          isCollabSetup={collaborativeModalOpen}
+          isCollabSetup={!!roomId}
+        />
+
+        <DiffViewer
+          onClose={() => setDiffViewerOpen(false)}
+          isOpen={diffViewerOpen}
+          roomId={roomId}
         />
       </div>
 
       <CollaborativeModal
         onClose={() => setCollaborativeModalOpen(false)}
         isOpen={collaborativeModalOpen}
+        onRoomCreated={(id) => setRoomId(id)}
       />
     </div>
   )

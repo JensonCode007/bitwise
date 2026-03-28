@@ -4,17 +4,23 @@ import { X, Copy, Check, Users, Shield, Zap } from 'lucide-react'
 interface CollaborativeModalProps {
   onClose: () => void
   isOpen: boolean
+  onRoomCreated?: (roomId: string) => void
 }
 
-export const CollaborativeModal = ({ onClose, isOpen }: CollaborativeModalProps) => {
+export const CollaborativeModal = ({ onClose, isOpen, onRoomCreated }: CollaborativeModalProps) => {
   const [roomCode, setRoomCode] = useState('')
   const [copied, setCopied] = useState(false)
 
   if (!isOpen) return null
 
-  const handleCreateRoom = () => {
+  const handleCreateRoom = async () => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase()
     setRoomCode(code)
+
+    if (window.api.collab) {
+      await window.api.collab.connect(code, 'User')
+      onRoomCreated?.(code)
+    }
   }
 
   const copyToClipboard = () => {

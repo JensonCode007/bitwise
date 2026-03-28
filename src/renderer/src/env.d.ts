@@ -9,6 +9,17 @@ interface FileEntry {
   children?: FileEntry[]
 }
 
+interface FileChange {
+  id: string
+  filePath: string
+  userId: string
+  userName: string
+  timestamp: number
+  oldContent: string
+  newContent: string
+  lineChanges: { line: number; type: 'add' | 'remove' | 'modify'; content: string }[]
+}
+
 interface Window {
   api: {
     dialog: {
@@ -29,6 +40,21 @@ interface Window {
     }
     shell: {
       openExternal: (url: string) => void
+    }
+    collab: {
+      connect: (roomId: string, userName: string) => Promise<void>
+      disconnect: () => void
+      sendCodeChange: (
+        roomId: string,
+        filePath: string,
+        oldCode: string,
+        newCode: string,
+        userName: string
+      ) => void
+      onCodeUpdate: (callback: (data: { filePath: string; code: string }) => void) => () => void
+      getAllChanges: (roomId: string) => Promise<{ changes: FileChange[] }>
+      onUserJoined: (callback: (data: { userId: string; userName: string }) => void) => () => void
+      onUserLeft: (callback: (user: { id: string; name: string }) => void) => () => void
     }
   }
   electron: {
