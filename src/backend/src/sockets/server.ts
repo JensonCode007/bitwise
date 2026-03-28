@@ -31,6 +31,7 @@ interface Room {
   projectPath?: string
   fileTree?: any[]
   messages: ChatMessage[]
+  drawings: any[] // whiteboard elements
 }
 
 interface SocketData {
@@ -78,6 +79,12 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     socket.data.roomId = roomId
 
     if (!rooms.has(roomId)) {
+      rooms.set(roomId, {
+        users: new Map(),
+        changes: [],
+        messages: [],
+        drawings: []
+      })
       rooms.set(roomId, { users: new Map(), changes: [], messages: [] })
     }
 
@@ -86,6 +93,7 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 
     socket.to(roomId).emit('user-joined', { userId: socket.id, userName })
     socket.emit('room-users', Array.from(room.users.values()))
+    socket.emit('load-canvas', room.drawings)
   })
 
   socket.on(
@@ -225,6 +233,27 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     socket.emit('chat-history', { messages: room.messages.slice(-50) })
   })
 
+  // --- WHITEBOARD EVENTS ---
+
+  socket.on('draw-action', ({ roomId, drawData }: { roomId: string; drawData: any }) => {
+    if (!rooms.has(roomId)) return
+    const room = rooms.get(roomId)!
+    room.drawings.push(drawData)
+    socket.to(roomId).emit('receive-draw', drawData)
+  })
+
+  socket.on('clear-canvas', ({ roomId }: { roomId: string }) => {
+    if (!rooms.has(roomId)) return
+    const room = rooms.get(roomId)!
+    room.drawings = []
+    socket.to(roomId).emit('canvas-cleared')
+  })
+
+  socket.on('cursor-move', ({ roomId, pointer, userName }: { roomId: string; pointer: { x: number; y: number }; userName: string }) => {
+    socket.to(roomId).emit('cursor-update', { socketId: socket.id, pointer, userName })
+  })
+
+  // --------------------------
   // ── NEW: assign a file to a user ──────────────────────────────────────────
   socket.on(
     'assign-file',
