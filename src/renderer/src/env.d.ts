@@ -55,6 +55,13 @@ interface Window {
       getAllChanges: (roomId: string) => Promise<{ changes: FileChange[] }>
       onUserJoined: (callback: (data: { userId: string; userName: string }) => void) => () => void
       onUserLeft: (callback: (user: { id: string; name: string }) => void) => () => void
+      onChangeMade: (callback: (change: FileChange) => void) => () => void
+      shareProject: (roomId: string, projectPath: string, fileTree: any[]) => void
+      onProjectShared: (
+        callback: (data: { projectPath: string; fileTree: any[] }) => void
+      ) => () => void
+      requestProject: (roomId: string) => void
+      isConnected: () => boolean
     }
   }
   electron: {

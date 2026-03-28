@@ -1,25 +1,55 @@
 import { useState } from 'react'
-import { X, Copy, Check, Users, Shield, Zap } from 'lucide-react'
+import { X, Copy, Check, Users, Shield, UserPlus } from 'lucide-react'
 
 interface CollaborativeModalProps {
   onClose: () => void
   isOpen: boolean
-  onRoomCreated?: (roomId: string) => void
+  onRoomJoined?: (roomId: string) => void
 }
 
-export const CollaborativeModal = ({ onClose, isOpen, onRoomCreated }: CollaborativeModalProps) => {
+export const CollaborativeModal = ({ onClose, isOpen, onRoomJoined }: CollaborativeModalProps) => {
   const [roomCode, setRoomCode] = useState('')
+  const [joinCode, setJoinCode] = useState('')
   const [copied, setCopied] = useState(false)
+  const [mode, setMode] = useState<'select' | 'create' | 'join'>('select')
+  const [userName, setUserName] = useState('')
+  const [error, setError] = useState('')
 
   if (!isOpen) return null
 
   const handleCreateRoom = async () => {
+    if (!userName.trim()) {
+      setError('Please enter your name')
+      return
+    }
+
     const code = Math.random().toString(36).substring(2, 8).toUpperCase()
     setRoomCode(code)
+    setError('')
 
     if (window.api.collab) {
-      await window.api.collab.connect(code, 'User')
-      onRoomCreated?.(code)
+      await window.api.collab.connect(code, userName)
+      onRoomJoined?.(code)
+    }
+  }
+
+  const handleJoinRoom = async () => {
+    if (!userName.trim()) {
+      setError('Please enter your name')
+      return
+    }
+    if (!joinCode.trim()) {
+      setError('Please enter a room code')
+      return
+    }
+
+    setError('')
+    const code = joinCode.trim().toUpperCase()
+
+    if (window.api.collab) {
+      await window.api.collab.connect(code, userName)
+      setRoomCode(code)
+      onRoomJoined?.(code)
     }
   }
 
@@ -31,7 +61,7 @@ export const CollaborativeModal = ({ onClose, isOpen, onRoomCreated }: Collabora
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-md bg-island border border-border rounded-island overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+      <div className="w-full max-w-md bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-3">
@@ -48,46 +78,92 @@ export const CollaborativeModal = ({ onClose, isOpen, onRoomCreated }: Collabora
             </button>
           </div>
 
-          {!roomCode ? (
+          {mode === 'select' && (
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center text-center space-y-3">
+                <div
+                  className="p-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl flex flex-col items-center text-center space-y-3 cursor-pointer hover:border-blue-500/50 transition-colors"
+                  onClick={() => setMode('create')}
+                >
                   <Shield size={24} className="text-blue-400" />
-                  <span className="text-xs font-medium text-gray-400">
-                    End-to-end encryption enabled
-                  </span>
+                  <span className="text-xs font-medium text-gray-400">Create Room</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/10 rounded-2xl flex flex-col items-center text-center space-y-3">
-                  <Zap size={24} className="text-yellow-400" />
-                  <span className="text-xs font-medium text-gray-400">
-                    Real-time sync performance
-                  </span>
+                <div
+                  className="p-4 bg-[#1a1a1a] border border-[#2a2a2a] rounded-2xl flex flex-col items-center text-center space-y-3 cursor-pointer hover:border-green-500/50 transition-colors"
+                  onClick={() => setMode('join')}
+                >
+                  <UserPlus size={24} className="text-green-400" />
+                  <span className="text-xs font-medium text-gray-400">Join Room</span>
                 </div>
               </div>
 
-              <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
+              <div className="bg-[#1a1a1a] p-4 rounded-2xl border border-[#2a2a2a]">
                 <p className="text-sm text-gray-400 leading-relaxed">
                   Invite your team to collaborate on code and design in real-time. Share your
                   session with a unique room code.
                 </p>
               </div>
+            </div>
+          )}
+
+          {(mode === 'create' || mode === 'join') && (
+            <div className="space-y-4">
+              <button
+                onClick={() => {
+                  setMode('select')
+                  setError('')
+                }}
+                className="text-xs text-gray-500 hover:text-white flex items-center space-x-1"
+              >
+                <span>←</span>
+                <span>Back</span>
+              </button>
+
+              <div className="space-y-2">
+                <label className="text-xs text-gray-400">Your Name</label>
+                <input
+                  type="text"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              {mode === 'join' && (
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-400">Room Code</label>
+                  <input
+                    type="text"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    placeholder="Enter room code"
+                    maxLength={6}
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-green-500 transition-colors font-mono tracking-widest"
+                  />
+                </div>
+              )}
+
+              {error && <p className="text-xs text-red-500">{error}</p>}
 
               <button
-                onClick={handleCreateRoom}
-                className="w-full bg-white text-black font-bold py-4 rounded-2xl hover:bg-gray-200 transition-all shadow-xl shadow-white/5 active:scale-[0.98]"
+                onClick={mode === 'create' ? handleCreateRoom : handleJoinRoom}
+                className="w-full bg-white text-black font-bold py-4 rounded-xl hover:bg-gray-200 transition-all shadow-lg"
               >
-                Create Room
+                {mode === 'create' ? 'Create Room' : 'Join Room'}
               </button>
             </div>
-          ) : (
-            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+          )}
+
+          {roomCode && (
+            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500 mt-6 pt-6 border-t border-[#2a2a2a]">
               <div className="text-center space-y-2">
                 <p className="text-xs font-bold uppercase tracking-widest text-gray-500">
-                  Room Code Ready
+                  {mode === 'join' ? 'Joined Room' : 'Active Room'}
                 </p>
                 <div className="flex items-center justify-center space-x-3">
-                  <div className="bg-black border-2 border-white/10 px-8 py-4 rounded-3xl">
-                    <span className="text-4xl font-mono font-black tracking-[0.5em] text-white ml-[0.5em]">
+                  <div className="bg-[#1a1a1a] border-2 border-[#2a2a2a] px-6 py-3 rounded-2xl">
+                    <span className="text-2xl font-mono font-black tracking-[0.3em] text-white">
                       {roomCode}
                     </span>
                   </div>
@@ -97,22 +173,16 @@ export const CollaborativeModal = ({ onClose, isOpen, onRoomCreated }: Collabora
               <div className="flex space-x-3">
                 <button
                   onClick={copyToClipboard}
-                  className="flex-1 flex items-center justify-center space-x-2 bg-white/10 text-white font-bold py-4 rounded-2xl hover:bg-white/15 transition-all border border-white/5"
+                  className="flex-1 flex items-center justify-center space-x-2 bg-[#1a1a1a] text-white font-medium py-3 rounded-xl hover:bg-[#252525] transition-colors border border-[#2a2a2a]"
                 >
-                  {copied ? <Check size={18} className="text-green-400" /> : <Copy size={18} />}
+                  {copied ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
                   <span>{copied ? 'Copied!' : 'Copy Code'}</span>
-                </button>
-                <button
-                  onClick={() => setRoomCode('')}
-                  className="px-6 bg-white/5 text-gray-400 font-medium py-4 rounded-2xl hover:bg-white/10 transition-all border border-white/5"
-                >
-                  Reset
                 </button>
               </div>
 
-              <div className="flex items-center justify-center space-x-2 text-xs text-gray-500 font-medium">
+              <div className="flex items-center justify-center space-x-2 text-xs text-gray-500">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span>Waiting for peers to join...</span>
+                <span>Connected - Share code to invite others</span>
               </div>
             </div>
           )}

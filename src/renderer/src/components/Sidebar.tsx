@@ -14,6 +14,9 @@ export interface SidebarProps {
   onClose: () => void
   isOpen: boolean
   projectPath: string | null
+  sharedProjectPath?: string | null
+  sharedFileTree?: FileEntry[] | null
+  isCollaborative?: boolean
   onFileClick?: (path: string, name: string) => void
   onDiffViewerClick?: () => void
 }
@@ -22,6 +25,9 @@ export const Sidebar = ({
   onClose,
   isOpen,
   projectPath,
+  sharedProjectPath,
+  sharedFileTree,
+  isCollaborative = false,
   onFileClick,
   onDiffViewerClick
 }: SidebarProps) => {
@@ -36,8 +42,10 @@ export const Sidebar = ({
         setFiles(entries)
         setLoading(false)
       })
+    } else if (sharedFileTree && sharedFileTree.length > 0) {
+      setFiles(sharedFileTree)
     }
-  }, [projectPath])
+  }, [projectPath, sharedFileTree])
 
   const toggleFolder = async (path: string) => {
     const newExpanded = new Set(expandedFolders)
@@ -141,22 +149,25 @@ export const Sidebar = ({
       <div className="flex-1 overflow-y-auto space-y-2">
         {loading ? (
           <div className="text-xs text-gray-500 p-2">Loading...</div>
-        ) : projectPath ? (
+        ) : files.length > 0 ? (
           renderFileTree(files)
+        ) : isCollaborative ? (
+          <div className="text-xs text-gray-500 p-4 text-center">
+            <p className="mb-2">Collaborative session active</p>
+            <p className="text-gray-600">Host hasn't shared a project yet</p>
+          </div>
         ) : (
           <div className="text-xs text-gray-500 p-2">No folder opened</div>
         )}
       </div>
 
-      {projectPath && (
-        <button
-          onClick={onDiffViewerClick}
-          className="flex items-center space-x-2 w-full px-3 py-2 mt-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors border-t border-[#2a2a2a]"
-        >
-          <FileDiff size={14} />
-          <span>Diff Viewer</span>
-        </button>
-      )}
+      <button
+        onClick={onDiffViewerClick}
+        className="flex items-center space-x-2 w-full px-3 py-2 mt-2 text-xs text-gray-400 hover:text-white hover:bg-white/5 rounded-md transition-colors border-t border-[#2a2a2a]"
+      >
+        <FileDiff size={14} />
+        <span>Diff Viewer</span>
+      </button>
     </div>
   )
 }

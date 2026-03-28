@@ -1,9 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { io, Socket } from 'socket.io-client'
 
-let socket: Socket | null = null
-const SOCKET_URL = 'http://localhost:5000'
+interface FileEntry {
+  name: string
+  path: string
+  isDirectory: boolean
+  size: number
+  modified: string
+}
 
 interface FileChange {
   id: string
@@ -13,6 +17,18 @@ interface FileChange {
   timestamp: number
   oldContent: string
   newContent: string
+  lineChanges: { line: number; type: 'add' | 'remove' | 'modify'; content: string }[]
+}
+
+let socket: any = null
+let io: any = null
+const SOCKET_URL = 'http://localhost:5002'
+
+const loadSocketIO = async () => {
+  if (io) return io
+  const socketIO = await import('socket.io-client')
+  io = socketIO.io
+  return io
 }
 
 const api = {
@@ -43,20 +59,51 @@ const api = {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
   },
   collab: {
-    connect: (roomId: string, userName: string) => {
-      if (socket) {
-        socket.disconnect()
-      }
-      socket = io(SOCKET_URL)
+    connect: async (roomId: string, userName: string): Promise<void> => {
+      try {
+        const SocketIO = await loadSocketIO()
 
-      return new Promise<void>((resolve) => {
-        socket?.emit('join-room', { roomId, userName })
-        socket?.on('room-users', () => {
-          resolve()
+        if (socket) {
+          socket.disconnect()
+        }
+
+        socket = SocketIO(SOCKET_URL, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000
         })
-        // Timeout fallback
-        setTimeout(resolve, 2000)
-      })
+
+        return new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('Socket connection timeout, but continuing...')
+            resolve()
+          }, 5000)
+
+          socket.on('connect', () => {
+            console.log('Socket connected:', socket.id)
+            socket.emit('join-room', { roomId, userName })
+          })
+
+          socket.on('room-users', (users: any[]) => {
+            console.log('Room users:', users)
+            clearTimeout(timeout)
+            resolve()
+          })
+
+          socket.on('connect_error', (err: Error) => {
+            console.error('Socket connection error:', err.message)
+            clearTimeout(timeout)
+            resolve()
+          })
+
+          socket.on('error', (err: Error) => {
+            console.error('Socket error:', err.message)
+          })
+        })
+      } catch (error) {
+        console.error('Failed to connect:', error)
+      }
     },
 
     disconnect: () => {
@@ -73,42 +120,87 @@ const api = {
       newCode: string,
       userName: string
     ) => {
-      socket?.emit('code-change', { roomId, filePath, oldCode, newCode, userName })
+      if (socket && socket.connected) {
+        socket.emit('code-change', { roomId, filePath, oldCode, newCode, userName })
+      }
     },
 
     onCodeUpdate: (callback: (data: { filePath: string; code: string }) => void) => {
-      socket?.on('code-update', callback)
-      return () => socket?.off('code-update', callback)
+      if (socket) {
+        socket.on('code-update', callback)
+        return () => socket.off('code-update', callback)
+      }
+      return () => {}
     },
 
-    getAllChanges: (roomId: string): Promise<{ changes: FileChange[] }> => {
+    getAllChanges: async (roomId: string): Promise<{ changes: FileChange[] }> => {
       return new Promise((resolve) => {
-        socket?.emit('get-all-changes', { roomId })
-        socket?.once('all-changes', (data: { changes: FileChange[] }) => {
+        if (!socket || !socket.connected) {
+          resolve({ changes: [] })
+          return
+        }
+
+        socket.emit('get-all-changes', { roomId })
+
+        const timeout = setTimeout(() => {
+          resolve({ changes: [] })
+        }, 1000)
+
+        socket.once('all-changes', (data: { changes: FileChange[] }) => {
+          clearTimeout(timeout)
           resolve(data)
         })
-        setTimeout(() => resolve({ changes: [] }), 1000)
       })
     },
 
     onUserJoined: (callback: (data: { userId: string; userName: string }) => void) => {
-      socket?.on('user-joined', callback)
-      return () => socket?.off('user-joined', callback)
+      if (socket) {
+        socket.on('user-joined', callback)
+        return () => socket.off('user-joined', callback)
+      }
+      return () => {}
     },
 
     onUserLeft: (callback: (user: { id: string; name: string }) => void) => {
-      socket?.on('user-left', callback)
-      return () => socket?.off('user-left', callback)
+      if (socket) {
+        socket.on('user-left', callback)
+        return () => socket.off('user-left', callback)
+      }
+      return () => {}
+    },
+
+    onChangeMade: (callback: (change: FileChange) => void) => {
+      if (socket) {
+        socket.on('change-made', callback)
+        return () => socket.off('change-made', callback)
+      }
+      return () => {}
+    },
+
+    shareProject: (roomId: string, projectPath: string, fileTree: any[]) => {
+      if (socket && socket.connected) {
+        socket.emit('share-project', { roomId, projectPath, fileTree })
+      }
+    },
+
+    onProjectShared: (callback: (data: { projectPath: string; fileTree: any[] }) => void) => {
+      if (socket) {
+        socket.on('project-shared', callback)
+        return () => socket.off('project-shared', callback)
+      }
+      return () => {}
+    },
+
+    requestProject: (roomId: string) => {
+      if (socket && socket.connected) {
+        socket.emit('get-project', { roomId })
+      }
+    },
+
+    isConnected: (): boolean => {
+      return socket && socket.connected
     }
   }
-}
-
-interface FileEntry {
-  name: string
-  path: string
-  isDirectory: boolean
-  size: number
-  modified: string
 }
 
 if (process.contextIsolated) {

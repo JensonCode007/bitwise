@@ -1,4 +1,14 @@
-import { FolderOpen, Plus, Settings, ChevronRight, TerminalSquare, SquarePlus } from 'lucide-react'
+import { useState } from 'react'
+import {
+  FolderOpen,
+  Plus,
+  Settings,
+  ChevronRight,
+  TerminalSquare,
+  UserPlus,
+  X,
+  Shield
+} from 'lucide-react'
 
 interface RecentProject {
   path: string
@@ -9,9 +19,19 @@ interface RecentProject {
 interface WelcomePageProps {
   onEnterIde: (projectPath?: string) => void
   recentProjects?: RecentProject[]
+  onJoinSession?: (roomId: string, userName: string) => void
 }
 
-const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = [] }) => {
+const WelcomePage: React.FC<WelcomePageProps> = ({
+  onEnterIde,
+  recentProjects = [],
+  onJoinSession
+}) => {
+  const [showJoinModal, setShowJoinModal] = useState(false)
+  const [roomCode, setRoomCode] = useState('')
+  const [userName, setUserName] = useState('')
+  const [error, setError] = useState('')
+
   const handleOpenFolder = async () => {
     const folderPath = await window.api.dialog.openFolder()
     if (folderPath) {
@@ -21,6 +41,19 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = 
 
   const handleNewProject = () => {
     onEnterIde()
+  }
+
+  const handleJoinSessionClick = () => {
+    if (!userName.trim()) {
+      setError('Please enter your name')
+      return
+    }
+    if (!roomCode.trim()) {
+      setError('Please enter a room code')
+      return
+    }
+    setError('')
+    onJoinSession?.(roomCode.trim().toUpperCase(), userName)
   }
 
   const formatTime = (timestamp: number): string => {
@@ -38,7 +71,6 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = 
   }
 
   return (
-    // Outer container: Black background, padding to create the outer "Island" spacing
     <div className="min-h-screen bg-black text-neutral-200 p-4 md:p-6 font-sans flex flex-col gap-6 selection:bg-neutral-800">
       {/* Top Header Island */}
       <header className="flex items-center justify-between rounded-2xl border border-neutral-800 bg-[#0a0a0a] p-4 px-6 shadow-2xl">
@@ -96,13 +128,16 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = 
                 </div>
               </button>
 
-              <button className="group flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 hover:border-neutral-600 hover:bg-neutral-900 transition-all duration-200">
+              <button
+                onClick={() => setShowJoinModal(true)}
+                className="group flex items-center justify-between rounded-xl border border-neutral-800 bg-neutral-900/50 p-4 hover:border-neutral-600 hover:bg-neutral-900 transition-all duration-200"
+              >
                 <div className="flex items-center gap-4">
                   <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-800 bg-[#0a0a0a]">
-                    <SquarePlus size={20} className="text-neutral-300" />
+                    <UserPlus size={20} className="text-green-400" />
                   </div>
                   <div className="text-left">
-                    <h3 className="font-medium text-white">Join session</h3>
+                    <h3 className="font-medium text-white">Join Session</h3>
                     <p className="text-sm text-neutral-500">Join a collaborative session</p>
                   </div>
                 </div>
@@ -143,6 +178,71 @@ const WelcomePage: React.FC<WelcomePageProps> = ({ onEnterIde, recentProjects = 
           </div>
         </div>
       </main>
+
+      {/* Join Session Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-md bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl overflow-hidden shadow-2xl">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-green-500/10 rounded-xl border border-green-500/20">
+                    <UserPlus size={20} className="text-green-400" />
+                  </div>
+                  <h2 className="text-xl font-bold tracking-tight text-white">Join Session</h2>
+                </div>
+                <button
+                  onClick={() => setShowJoinModal(false)}
+                  className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-400">Your Name</label>
+                  <input
+                    type="text"
+                    value={userName}
+                    onChange={(e) => setUserName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-green-500 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs text-gray-400">Room Code</label>
+                  <input
+                    type="text"
+                    value={roomCode}
+                    onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                    placeholder="Enter room code"
+                    maxLength={6}
+                    className="w-full bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-3 text-white placeholder-gray-500 outline-none focus:border-green-500 transition-colors font-mono tracking-widest"
+                  />
+                </div>
+
+                {error && <p className="text-xs text-red-500">{error}</p>}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <Shield size={14} className="text-gray-500" />
+                  <span className="text-xs text-gray-500">
+                    You'll be connected to the collaborative session
+                  </span>
+                </div>
+
+                <button
+                  onClick={handleJoinSessionClick}
+                  className="w-full bg-green-500 text-black font-bold py-4 rounded-xl hover:bg-green-400 transition-all shadow-lg"
+                >
+                  Join Session
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

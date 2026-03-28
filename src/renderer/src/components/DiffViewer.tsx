@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Minus, RefreshCw, FileDiff, Clock, User } from 'lucide-react'
+import { X, Plus, Minus, RefreshCw, Clock, User } from 'lucide-react'
 
 interface FileChange {
   id: string

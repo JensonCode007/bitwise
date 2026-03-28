@@ -39,6 +39,9 @@ export default function App() {
   const [diffViewerOpen, setDiffViewerOpen] = useState(false)
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
   const [roomId, setRoomId] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string>('User')
+  const [sharedProjectPath, setSharedProjectPath] = useState<string | null>(null)
+  const [sharedFileTree, setSharedFileTree] = useState<any[]>([])
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
 
@@ -52,6 +55,27 @@ export default function App() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!roomId || !window.api.collab) return
+
+    const unsubscribe = window.api.collab.onProjectShared((data) => {
+      setSharedProjectPath(data.projectPath)
+      setSharedFileTree(data.fileTree || [])
+    })
+
+    window.api.collab.requestProject(roomId)
+
+    return () => unsubscribe()
+  }, [roomId])
+
+  useEffect(() => {
+    if (!projectPath || !roomId || !window.api.collab) return
+
+    window.api.fs.readDirectory(projectPath).then((entries) => {
+      window.api.collab.shareProject(roomId, projectPath, entries)
+    })
+  }, [projectPath, roomId])
 
   const addRecentProject = (path: string) => {
     const name = getProjectName(path)
@@ -112,8 +136,24 @@ export default function App() {
     setShowIDE(true)
   }
 
+  const handleJoinSession = async (roomId: string, userName: string) => {
+    if (window.api.collab) {
+      await window.api.collab.connect(roomId, userName)
+      setRoomId(roomId)
+      setUserName(userName)
+      setShowIDE(true)
+      setSidebarOpen(true)
+    }
+  }
+
   if (!showIDE) {
-    return <WelcomePage onEnterIde={handleEnterIde} recentProjects={recentProjects} />
+    return (
+      <WelcomePage
+        onEnterIde={handleEnterIde}
+        recentProjects={recentProjects}
+        onJoinSession={handleJoinSession}
+      />
+    )
   }
 
   return (
@@ -130,6 +170,9 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
           isOpen={sidebarOpen}
           projectPath={projectPath}
+          sharedProjectPath={sharedProjectPath}
+          sharedFileTree={sharedFileTree}
+          isCollaborative={!!roomId}
           onFileClick={handleFileClick}
           onDiffViewerClick={() => setDiffViewerOpen(true)}
         />
@@ -165,7 +208,12 @@ export default function App() {
               )}
               <div className="flex-1 overflow-hidden">
                 {activeFile ? (
-                  <CodeEditor projectPath={projectPath} openFile={activeFile} />
+                  <CodeEditor
+                    projectPath={projectPath}
+                    openFile={activeFile}
+                    roomId={roomId}
+                    userName={userName}
+                  />
                 ) : (
                   <div className="flex-1 w-full h-full overflow-hidden bg-[#0d0d0d] border border-[#2a2a2a] rounded-xl flex items-center justify-center">
                     <p className="text-gray-500">Select a file from the sidebar to edit</p>
@@ -200,7 +248,7 @@ export default function App() {
       <CollaborativeModal
         onClose={() => setCollaborativeModalOpen(false)}
         isOpen={collaborativeModalOpen}
-        onRoomCreated={(id) => setRoomId(id)}
+        onRoomJoined={(id) => setRoomId(id)}
       />
     </div>
   )

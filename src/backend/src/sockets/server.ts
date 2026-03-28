@@ -19,6 +19,8 @@ interface FileChange {
 interface Room {
   users: Map<string, { id: string; name: string }>
   changes: FileChange[]
+  projectPath?: string
+  fileTree?: any[]
 }
 
 const rooms = new Map<string, Room>()
@@ -141,6 +143,39 @@ io.on('connection', (socket) => {
     socket.emit('all-changes', { changes: room.changes.slice(-50) })
   })
 
+  socket.on(
+    'share-project',
+    ({
+      roomId,
+      projectPath,
+      fileTree
+    }: {
+      roomId: string
+      projectPath: string
+      fileTree: any[]
+    }) => {
+      if (!rooms.has(roomId)) return
+
+      const room = rooms.get(roomId)!
+      room.projectPath = projectPath
+      room.fileTree = fileTree
+
+      socket.to(roomId).emit('project-shared', { projectPath, fileTree })
+    }
+  )
+
+  socket.on('get-project', ({ roomId }: { roomId: string }) => {
+    if (!rooms.has(roomId)) return
+
+    const room = rooms.get(roomId)!
+    if (room.projectPath) {
+      socket.emit('project-shared', {
+        projectPath: room.projectPath,
+        fileTree: room.fileTree || []
+      })
+    }
+  })
+
   socket.on('disconnect', () => {
     rooms.forEach((room, roomId) => {
       if (room.users.has(socket.id)) {
@@ -153,7 +188,7 @@ io.on('connection', (socket) => {
   })
 })
 
-const PORT = 5000
+const PORT = 5002
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`)
 })
