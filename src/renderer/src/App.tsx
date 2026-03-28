@@ -279,7 +279,7 @@ export default function App() {
       <CollaborativeModal
         onClose={() => setCollaborativeModalOpen(false)}
         isOpen={collaborativeModalOpen}
-        onRoomJoined={(id) => setRoomId(id)}
+        onRoomJoined={(id, name) => { setRoomId(id); setUserName(name) }}
       />
     </div>
   )
