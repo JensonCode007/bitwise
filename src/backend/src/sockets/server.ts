@@ -1,6 +1,6 @@
 import express from 'express'
 import http from 'http'
-import { Server } from 'socket.io'
+import { Server, Socket } from 'socket.io'
 
 const app = express()
 const server = http.createServer(app)
@@ -16,16 +16,32 @@ interface FileChange {
   lineChanges: { line: number; type: 'add' | 'remove' | 'modify'; content: string }[]
 }
 
+interface ChatMessage {
+  id: string
+  userId: string
+  userName: string
+  content: string
+  timestamp: number
+}
+
 interface Room {
   users: Map<string, { id: string; name: string }>
   changes: FileChange[]
   projectPath?: string
   fileTree?: any[]
+  messages: ChatMessage[]
+}
+
+interface SocketData {
+  userName?: string
+  roomId?: string
 }
 
 const rooms = new Map<string, Room>()
 
-const io = new Server(server, {
+const DEBOUNCE_MS = 1000 // merge changes within 1 second
+
+const io = new Server<any, any, any, SocketData>(server, {
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
@@ -55,16 +71,19 @@ function computeLineChanges(oldContent: string, newContent: string): FileChange[
   return changes
 }
 
-io.on('connection', (socket) => {
+io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
   console.log(`New User connected: ${socket.id}`)
 
   socket.on('join-room', ({ roomId, userName }: { roomId: string; userName: string }) => {
     socket.join(roomId)
+    socket.data.userName = userName
+    socket.data.roomId = roomId
 
     if (!rooms.has(roomId)) {
       rooms.set(roomId, {
         users: new Map(),
-        changes: []
+        changes: [],
+        messages: []
       })
     }
 
@@ -93,14 +112,36 @@ io.on('connection', (socket) => {
       if (!rooms.has(roomId)) return
 
       const room = rooms.get(roomId)!
+      const resolvedName = userName || socket.data.userName || 'Anonymous'
+      const now = Date.now()
+
+      // Find the last change for this file by this user
+      const lastChangeIdx = room.changes.findLastIndex(
+        (c) => c.filePath === filePath && c.userId === socket.id
+      )
+      const lastChange = lastChangeIdx !== -1 ? room.changes[lastChangeIdx] : null
+
+      // If within debounce window, update the existing change instead of creating a new one
+      if (lastChange && now - lastChange.timestamp < DEBOUNCE_MS) {
+        lastChange.newContent = newCode
+        lastChange.timestamp = now
+        lastChange.lineChanges = computeLineChanges(lastChange.oldContent, newCode)
+
+        // Broadcast the updated change
+        socket.to(roomId).emit('code-update', { filePath, code: newCode })
+        socket.to(roomId).emit('change-made', lastChange)
+        return
+      }
+
+      // Otherwise create a new change entry
       const lineChanges = computeLineChanges(oldCode || '', newCode)
 
       const change: FileChange = {
         id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
         filePath,
         userId: socket.id,
-        userName: userName || 'Anonymous',
-        timestamp: Date.now(),
+        userName: resolvedName,
+        timestamp: now,
         oldContent: oldCode || '',
         newContent: newCode,
         lineChanges
@@ -128,7 +169,7 @@ io.on('connection', (socket) => {
     }
 
     const room = rooms.get(roomId)!
-    const fileChanges = room.changes.filter((c) => c.filePath === filePath).slice(-20) // Last 20 changes
+    const fileChanges = room.changes.filter((c) => c.filePath === filePath).slice(-20)
 
     socket.emit('file-changes', { filePath, changes: fileChanges })
   })
@@ -174,6 +215,37 @@ io.on('connection', (socket) => {
         fileTree: room.fileTree || []
       })
     }
+  })
+
+  socket.on('chat-message', ({ roomId, content }: { roomId: string; content: string }) => {
+    if (!rooms.has(roomId)) return
+
+    const room = rooms.get(roomId)!
+    const user = room.users.get(socket.id)
+    if (!user) return
+
+    const message: ChatMessage = {
+      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+      userId: socket.id,
+      userName: user.name,
+      content,
+      timestamp: Date.now()
+    }
+
+    room.messages.push(message)
+    if (room.messages.length > 100) {
+      room.messages = room.messages.slice(-100)
+    }
+
+    socket.to(roomId).emit('chat-message', message)
+    socket.emit('chat-message-sent', message)
+  })
+
+  socket.on('get-chat-history', ({ roomId }: { roomId: string }) => {
+    if (!rooms.has(roomId)) return
+
+    const room = rooms.get(roomId)!
+    socket.emit('chat-history', { messages: room.messages.slice(-50) })
   })
 
   socket.on('disconnect', () => {

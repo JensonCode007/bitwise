@@ -40,7 +40,6 @@ export default function App() {
   const [collaborativeModalOpen, setCollaborativeModalOpen] = useState(false)
   const [roomId, setRoomId] = useState<string | null>(null)
   const [userName, setUserName] = useState<string>('User')
-  const [sharedProjectPath, setSharedProjectPath] = useState<string | null>(null)
   const [sharedFileTree, setSharedFileTree] = useState<any[]>([])
   const [activeView, setActiveView] = useState<'code' | 'canvas'>('code')
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([])
@@ -60,7 +59,6 @@ export default function App() {
     if (!roomId || !window.api.collab) return
 
     const unsubscribe = window.api.collab.onProjectShared((data) => {
-      setSharedProjectPath(data.projectPath)
       setSharedFileTree(data.fileTree || [])
     })
 
@@ -170,7 +168,6 @@ export default function App() {
           onClose={() => setSidebarOpen(false)}
           isOpen={sidebarOpen}
           projectPath={projectPath}
-          sharedProjectPath={sharedProjectPath}
           sharedFileTree={sharedFileTree}
           isCollaborative={!!roomId}
           onFileClick={handleFileClick}
@@ -236,6 +233,8 @@ export default function App() {
           isOpen={chatOpen}
           onSetupCollab={() => setCollaborativeModalOpen(true)}
           isCollabSetup={!!roomId}
+          roomId={roomId}
+          userName={userName}
         />
 
         <DiffViewer

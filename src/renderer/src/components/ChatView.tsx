@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Send, X, Plus, MoreVertical } from 'lucide-react'
 
 interface Message {
   id: string
-  user: string
+  userId: string
+  userName: string
   content: string
-  timestamp: Date
+  timestamp: number
 }
 
 interface ChatViewProps {
@@ -13,29 +14,56 @@ interface ChatViewProps {
   isOpen: boolean
   onSetupCollab?: () => void
   isCollabSetup?: boolean
+  roomId?: string | null
+  userName?: string
 }
 
 export const ChatView = ({
   onClose,
   isOpen,
   onSetupCollab,
-  isCollabSetup = false
+  isCollabSetup = false,
+  roomId,
+  userName = 'You'
 }: ChatViewProps) => {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const currentUser = 'You'
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!isCollabSetup || !roomId || !window.api.collab) return
+
+    window.api.collab.getChatHistory(roomId).then((history) => {
+      setMessages(history || [])
+    })
+
+    const unsubscribeMsg = window.api.collab.onChatMessage((message) => {
+      setMessages((prev) => [...prev, message])
+    })
+
+    const unsubscribeSent = window.api.collab.onChatMessageSent((message) => {
+      setMessages((prev) => {
+        if (!prev.find((m) => m.id === message.id)) {
+          return [...prev, message]
+        }
+        return prev
+      })
+    })
+
+    return () => {
+      unsubscribeMsg()
+      unsubscribeSent()
+    }
+  }, [isCollabSetup, roomId])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
   const handleSend = () => {
-    if (!input.trim()) return
+    if (!input.trim() || !roomId || !window.api.collab) return
 
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      user: currentUser,
-      content: input,
-      timestamp: new Date()
-    }
-
-    setMessages((prev) => [...prev, newMessage])
+    window.api.collab.sendChatMessage(roomId, input.trim())
     setInput('')
   }
 
@@ -46,6 +74,10 @@ export const ChatView = ({
     }
   }
 
+  const formatTime = (timestamp: number): string => {
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
   if (!isOpen) return null
 
   return (
@@ -54,6 +86,7 @@ export const ChatView = ({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a2a]">
         <div className="flex items-center space-x-2">
           <span className="text-sm font-medium text-white">Chat</span>
+          {roomId && <span className="text-xs text-green-500">•</span>}
         </div>
         <div className="flex items-center space-x-1">
           <button className="p-1 hover:bg-white/5 rounded transition-colors text-gray-500">
@@ -84,30 +117,43 @@ export const ChatView = ({
       ) : (
         <>
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {messages.length === 0 ? (
               <div className="text-center text-gray-500 text-sm py-8">
                 No messages yet. Start the conversation!
               </div>
             ) : (
-              messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.user === currentUser ? 'justify-end' : 'justify-start'}`}
-                >
+              messages.map((message) => {
+                const isCurrentUser = message.userName === userName
+                return (
                   <div
-                    className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${
-                      message.user === currentUser
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-[#1a1a1a] text-gray-300 border border-[#2a2a2a]'
-                    }`}
+                    key={message.id}
+                    className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'}`}
                   >
-                    <div className="text-xs font-medium mb-1 opacity-70">{message.user}</div>
-                    <div>{message.content}</div>
+                    <div
+                      className={`max-w-[85%] px-3 py-2 rounded-lg text-sm ${
+                        isCurrentUser
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-[#1a1a1a] text-gray-300 border border-[#2a2a2a]'
+                      }`}
+                    >
+                      {!isCurrentUser && (
+                        <div className="text-xs font-medium mb-1 text-blue-400">
+                          {message.userName}
+                        </div>
+                      )}
+                      <div className="break-words">{message.content}</div>
+                      <div
+                        className={`text-[10px] mt-1 ${isCurrentUser ? 'text-blue-200' : 'text-gray-600'}`}
+                      >
+                        {formatTime(message.timestamp)}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Input */}

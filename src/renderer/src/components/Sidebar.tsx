@@ -14,7 +14,6 @@ export interface SidebarProps {
   onClose: () => void
   isOpen: boolean
   projectPath: string | null
-  sharedProjectPath?: string | null
   sharedFileTree?: FileEntry[] | null
   isCollaborative?: boolean
   onFileClick?: (path: string, name: string) => void
@@ -25,7 +24,6 @@ export const Sidebar = ({
   onClose,
   isOpen,
   projectPath,
-  sharedProjectPath,
   sharedFileTree,
   isCollaborative = false,
   onFileClick,

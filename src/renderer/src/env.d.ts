@@ -61,6 +61,10 @@ interface Window {
         callback: (data: { projectPath: string; fileTree: any[] }) => void
       ) => () => void
       requestProject: (roomId: string) => void
+      sendChatMessage: (roomId: string, content: string) => void
+      onChatMessage: (callback: (message: any) => void) => () => void
+      onChatMessageSent: (callback: (message: any) => void) => () => void
+      getChatHistory: (roomId: string) => Promise<any[]>
       isConnected: () => boolean
     }
   }

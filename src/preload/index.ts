@@ -197,6 +197,43 @@ const api = {
       }
     },
 
+    sendChatMessage: (roomId: string, content: string) => {
+      if (socket && socket.connected) {
+        socket.emit('chat-message', { roomId, content })
+      }
+    },
+
+    onChatMessage: (callback: (message: any) => void) => {
+      if (socket) {
+        socket.on('chat-message', callback)
+        return () => socket.off('chat-message', callback)
+      }
+      return () => {}
+    },
+
+    onChatMessageSent: (callback: (message: any) => void) => {
+      if (socket) {
+        socket.on('chat-message-sent', callback)
+        return () => socket.off('chat-message-sent', callback)
+      }
+      return () => {}
+    },
+
+    getChatHistory: (roomId: string): Promise<any[]> => {
+      return new Promise((resolve) => {
+        if (!socket || !socket.connected) {
+          resolve([])
+          return
+        }
+        socket.emit('get-chat-history', { roomId })
+        const timeout = setTimeout(() => resolve([]), 1000)
+        socket.once('chat-history', (data: { messages: any[] }) => {
+          clearTimeout(timeout)
+          resolve(data.messages || [])
+        })
+      })
+    },
+
     isConnected: (): boolean => {
       return socket && socket.connected
     }
