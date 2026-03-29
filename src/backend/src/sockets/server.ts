@@ -30,6 +30,7 @@ interface Room {
   changes: FileChange[]
   projectPath?: string
   fileTree?: any[]
+  fileContents: Map<string, string>
   messages: ChatMessage[]
   drawings: any[] // whiteboard elements
 }
@@ -83,9 +84,9 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
         users: new Map(),
         changes: [],
         messages: [],
-        drawings: []
+        drawings: [],
+        fileContents: new Map()
       })
-      rooms.set(roomId, { users: new Map(), changes: [], messages: [] })
     }
 
     const room = rooms.get(roomId)!
@@ -94,7 +95,51 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     socket.to(roomId).emit('user-joined', { userId: socket.id, userName })
     socket.emit('room-users', Array.from(room.users.values()))
     socket.emit('load-canvas', room.drawings)
+
+    if (room.fileContents.size > 0) {
+      console.log('Sending all-file-contents to new user, count:', room.fileContents.size)
+      socket.emit('all-file-contents', Array.from(room.fileContents.entries()))
+    }
   })
+
+  socket.on('request-all-files', ({ roomId }: { roomId: string }) => {
+    console.log('Received request-all-files for room:', roomId)
+    if (!rooms.has(roomId)) {
+      console.log('Room not found:', roomId)
+      return
+    }
+    const room = rooms.get(roomId)!
+    console.log('Room fileContents size:', room.fileContents.size)
+    if (room.fileContents.size > 0) {
+      console.log('Responding to request-all-files, count:', room.fileContents.size)
+      socket.emit('all-file-contents', Array.from(room.fileContents.entries()))
+    } else {
+      console.log('No files in room, room.fileTree:', room.fileTree?.length || 0)
+    }
+  })
+
+  socket.on(
+    'cursor-change',
+    ({
+      roomId,
+      filePath,
+      position,
+      userName
+    }: {
+      roomId: string
+      filePath: string
+      position: { lineNumber: number; column: number }
+      userName: string
+    }) => {
+      if (!rooms.has(roomId)) return
+      socket.to(roomId).emit('cursor-update', {
+        userId: socket.id,
+        userName,
+        filePath,
+        position
+      })
+    }
+  )
 
   socket.on(
     'code-change',
@@ -192,6 +237,18 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
       room.projectPath = projectPath
       room.fileTree = fileTree
       socket.to(roomId).emit('project-shared', { projectPath, fileTree })
+    }
+  )
+
+  socket.on(
+    'file-content',
+    ({ roomId, filePath, content }: { roomId: string; filePath: string; content: string }) => {
+      console.log('Received file-content:', filePath, 'content length:', content.length)
+      if (!rooms.has(roomId)) return
+      const room = rooms.get(roomId)!
+      room.fileContents.set(filePath, content)
+      console.log('Room now has', room.fileContents.size, 'files')
+      socket.to(roomId).emit('file-content', { filePath, content })
     }
   )
 

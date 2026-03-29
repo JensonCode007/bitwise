@@ -100,8 +100,27 @@ export default function App() {
   useEffect(() => {
     if (!projectPath || !roomId || !window.api.collab) return
 
+    const shareAllFiles = async (entries: any[]) => {
+      for (const entry of entries) {
+        if (entry.isDirectory && entry.children) {
+          await shareAllFiles(entry.children)
+        } else {
+          try {
+            const result = await window.api.fs.readFile(entry.path)
+            if (result.success && result.content) {
+              const content = atob(result.content)
+              window.api.collab.sendFileContent(roomId, entry.path, content)
+            }
+          } catch (e) {
+            console.error('Error reading file:', entry.path, e)
+          }
+        }
+      }
+    }
+
     window.api.fs.readDirectory(projectPath).then((entries) => {
       window.api.collab.shareProject(roomId, projectPath, entries)
+      shareAllFiles(entries)
     })
   }, [projectPath, roomId])
 
@@ -205,9 +224,10 @@ export default function App() {
         />
 
         <div className="flex-1 flex flex-col gap-4 overflow-hidden relative">
-          
           {/* ✅ EDITOR VIEW - Hidden via CSS when not active */}
-          <div className={`flex-1 flex-col overflow-hidden ${activeView === 'code' ? 'flex' : 'hidden'}`}>
+          <div
+            className={`flex-1 flex-col overflow-hidden ${activeView === 'code' ? 'flex' : 'hidden'}`}
+          >
             {openFiles.length > 0 && (
               <div className="flex items-center bg-[#0d0d0d] border border-[#2a2a2a] rounded-t-xl border-b-0">
                 {openFiles.map((file, index) => (
@@ -251,7 +271,9 @@ export default function App() {
           </div>
 
           {/* ✅ CANVAS VIEW - Hidden via CSS when not active */}
-          <div className={`flex-1 w-full h-full overflow-hidden ${activeView === 'canvas' ? 'block' : 'hidden'}`}>
+          <div
+            className={`flex-1 w-full h-full overflow-hidden ${activeView === 'canvas' ? 'block' : 'hidden'}`}
+          >
             <CanvasView />
           </div>
 
@@ -283,7 +305,10 @@ export default function App() {
       <CollaborativeModal
         onClose={() => setCollaborativeModalOpen(false)}
         isOpen={collaborativeModalOpen}
-        onRoomJoined={(id, name) => { setRoomId(id); setUserName(name) }}
+        onRoomJoined={(id, name) => {
+          setRoomId(id)
+          setUserName(name)
+        }}
       />
     </div>
   )

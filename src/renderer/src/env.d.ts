@@ -61,6 +61,24 @@ interface Window {
         callback: (data: { projectPath: string; fileTree: any[] }) => void
       ) => () => void
       requestProject: (roomId: string) => void
+      sendFileContent: (roomId: string, filePath: string, content: string) => void
+      onFileContent: (callback: (data: { filePath: string; content: string }) => void) => () => void
+      onAllFileContents: (callback: (contents: [string, string][]) => void) => () => void
+      requestAllFiles: (roomId: string) => void
+      sendCursorChange: (
+        roomId: string,
+        filePath: string,
+        position: { lineNumber: number; column: number },
+        userName: string
+      ) => void
+      onCursorUpdate: (
+        callback: (data: {
+          userId: string
+          userName: string
+          filePath: string
+          position: { lineNumber: number; column: number }
+        }) => void
+      ) => () => void
       sendChatMessage: (roomId: string, content: string) => void
       onChatMessage: (callback: (message: any) => void) => () => void
       onChatMessageSent: (callback: (message: any) => void) => () => void
