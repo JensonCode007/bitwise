@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MousePointer2, Pencil, Square, Circle, Minus, Type, Layers, Trash2 } from 'lucide-react'
+import { MousePointer2, Pencil, Square, Circle, Minus, Type, Layers, Trash2, Download } from 'lucide-react'
 import { io, Socket } from 'socket.io-client'
 
 const SHAPE_TOOLS   = ['Square', 'Circle', 'Minus']
@@ -7,13 +7,12 @@ const DRAWING_TOOLS = ['Pencil', 'Square', 'Circle', 'Minus']
 
 export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   const canvasRef      = useRef<HTMLCanvasElement>(null)
-  const gridRef        = useRef<HTMLDivElement>(null) // NEW: To move the grid when panning
+  const gridRef        = useRef<HTMLDivElement>(null)
   const socketRef      = useRef<Socket | null>(null)
   const drawingsRef    = useRef<any[]>([])
   
-  // NEW: The Infinite Canvas "Camera" (X, Y offset and Z for zoom)
   const cameraRef      = useRef({ x: 0, y: 0, z: 1 })
-  const pendingShapeRef= useRef<any>(null) // Replaces snapshotRef to prevent clipping
+  const pendingShapeRef= useRef<any>(null)
   
   const startPosRef    = useRef({ x: 0, y: 0 })
   const isDrawingRef   = useRef(false)
@@ -22,13 +21,17 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   const clearSeqRef    = useRef(0)
 
   const [activeTool, setActiveTool] = useState('Pencil')
+  
+  // NEW: State to track the floating text input box
+  const [textInput, setTextInput] = useState<{ x: number; y: number; text: string } | null>(null)
+
   const setTool = (tool: string) => {
     setActiveTool(tool)
     activeToolRef.current = tool
   }
 
   const tools = [
-    { icon: MousePointer2, name: 'Select' }, // We will use this to PAN the camera!
+    { icon: MousePointer2, name: 'Select' },
     { icon: Pencil,        name: 'Pencil' },
     { icon: Square,        name: 'Square' },
     { icon: Circle,        name: 'Circle' },
@@ -37,7 +40,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     { icon: Layers,        name: 'Layers' }
   ]
 
-  // NEW: Convert Screen Pixels (Mouse) to World Coordinates (Infinite Space)
   const getWorldPos = (screenX: number, screenY: number) => {
     return {
       x: (screenX - cameraRef.current.x) / cameraRef.current.z,
@@ -45,7 +47,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     }
   }
 
-  // NEW: Update the visual grid background to match pan/zoom
   const updateGrid = () => {
     if (!gridRef.current) return
     const { x, y, z } = cameraRef.current
@@ -53,9 +54,9 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     gridRef.current.style.backgroundSize = `${40 * z}px ${40 * z}px`
   }
 
-  // ─── Renderer — Now supports transformed context ──────────────────────────
   const applyDrawData = (ctx: CanvasRenderingContext2D, d: any) => {
     ctx.strokeStyle = 'white'
+    ctx.fillStyle   = 'white'
     ctx.lineWidth   = 2
     ctx.lineCap     = 'round'
     ctx.lineJoin    = 'round'
@@ -79,30 +80,30 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
       ctx.beginPath()
       ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
       ctx.stroke()
+    } else if (tool === 'Type') {
+      // NEW: Handle drawing text onto the canvas!
+      ctx.font = '24px sans-serif'
+      ctx.textBaseline = 'top' // Render down from the click point
+      ctx.fillText(d.text, d.x0, d.y0)
     }
   }
 
-  // NEW: The Master Render Loop. Redraws everything from memory instantly.
   const renderFrame = () => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     if (!canvas || !ctx) return
 
-    // 1. Clear physical screen
     ctx.save()
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, canvas.width, canvas.height)
     ctx.restore()
 
-    // 2. Apply Infinite Camera Transform
     ctx.save()
     ctx.translate(cameraRef.current.x, cameraRef.current.y)
     ctx.scale(cameraRef.current.z, cameraRef.current.z)
 
-    // 3. Draw History
     drawingsRef.current.forEach((d) => applyDrawData(ctx, d))
 
-    // 4. Draw shape currently being dragged (prevents clipping bugs!)
     if (pendingShapeRef.current) {
       applyDrawData(ctx, pendingShapeRef.current)
     }
@@ -115,10 +116,37 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     pendingShapeRef.current = null
     renderFrame()
     socketRef.current?.emit('clear-canvas', { roomId })
-    // clearSeqRef will be updated when canvas-cleared arrives from server
   }
 
-  // ─── Effect 1: Socket ────────────────────────────────────────────────────────
+  // --- NEW: DOWNLOAD LOGIC ---
+  const handleDownload = () => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    // Create a temporary canvas
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = canvas.width
+    tempCanvas.height = canvas.height
+    const tempCtx = tempCanvas.getContext('2d')
+    if (!tempCtx) return
+
+    // Fill with a dark background so white ink is visible
+    tempCtx.fillStyle = '#0f0f0f'
+    tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height)
+    
+    // Draw the current viewport over the dark background
+    tempCtx.drawImage(canvas, 0, 0)
+
+    const dataUrl = tempCanvas.toDataURL('image/png')
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = `bitwise-whiteboard-${Date.now()}.png`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+  // ---------------------------
+
   useEffect(() => {
     const socket = io('http://localhost:5002')
     socketRef.current = socket
@@ -132,7 +160,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     })
 
     socket.on('receive-draw', (drawData: any) => {
-      // Discard draws that belong to a cleared generation
       if ((drawData.clearSeq ?? 0) < clearSeqRef.current) return
       drawingsRef.current.push(drawData)
       renderFrame()
@@ -151,7 +178,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     }
   }, [roomId, userName])
 
-  // ─── Effect 2: Canvas sizing & Mouse Wheel Zoom ──────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -166,13 +192,11 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     const observer = new ResizeObserver(setSize)
     observer.observe(canvas)
 
-    // Handle Zooming via Mouse Wheel
     const handleWheel = (e: WheelEvent) => {
-      e.preventDefault() // Stop page from scrolling
+      e.preventDefault() 
       const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1
-      const newZ = Math.min(Math.max(cameraRef.current.z * zoomDelta, 0.1), 10) // Clamp zoom
+      const newZ = Math.min(Math.max(cameraRef.current.z * zoomDelta, 0.1), 10) 
       
-      // Math to zoom exactly where the mouse is pointing
       const mouseX = e.offsetX
       const mouseY = e.offsetY
       cameraRef.current.x = mouseX - (mouseX - cameraRef.current.x) * (newZ / cameraRef.current.z)
@@ -190,24 +214,46 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     }
   }, [])
 
-  // ─── Pointer handlers ────────────────────────────────────────────────────────
+  // --- NEW: TEXT TOOL LOGIC ---
+  const saveText = () => {
+    if (textInput && textInput.text.trim()) {
+      const drawData = {
+        tool: 'Type',
+        x0: textInput.x,
+        y0: textInput.y,
+        text: textInput.text,
+        clearSeq: clearSeqRef.current // Ensure text respects clears!
+      }
+      drawingsRef.current.push(drawData)
+      socketRef.current?.emit('draw-action', { roomId, drawData })
+      renderFrame()
+    }
+    setTextInput(null)
+  }
+  // -----------------------------
+
   const startDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // MAGIC FIX: Bind the mouse to the canvas so it keeps drawing even outside the window!
     e.currentTarget.setPointerCapture(e.pointerId) 
     
     const tool = activeToolRef.current
     const { offsetX, offsetY } = e.nativeEvent
-    isDrawingRef.current  = true
 
     if (tool === 'Select') {
-      // Setup for panning
       lastPosRef.current = { x: offsetX, y: offsetY }
+      return
+    }
+
+    // Handle Text Tool Click
+    if (tool === 'Type') {
+      if (textInput) saveText() // Save previous text if clicking elsewhere
+      const worldPos = getWorldPos(offsetX, offsetY)
+      setTextInput({ x: worldPos.x, y: worldPos.y, text: '' })
       return
     }
 
     if (!DRAWING_TOOLS.includes(tool)) return
 
-    // Convert to infinite world coordinates before saving
+    isDrawingRef.current  = true
     const worldPos = getWorldPos(offsetX, offsetY)
     lastPosRef.current    = worldPos
     startPosRef.current   = worldPos
@@ -220,7 +266,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     const { offsetX, offsetY } = e.nativeEvent
 
     if (tool === 'Select') {
-      // Pan the camera around!
       cameraRef.current.x += (offsetX - lastPosRef.current.x)
       cameraRef.current.y += (offsetY - lastPosRef.current.y)
       lastPosRef.current = { x: offsetX, y: offsetY }
@@ -245,14 +290,12 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
       lastPosRef.current = worldPos
       renderFrame()
     } else if (SHAPE_TOOLS.includes(tool)) {
-      // Save pending shape to memory so it doesn't clip, then render
       pendingShapeRef.current = { tool, x0: startPosRef.current.x, y0: startPosRef.current.y, x1: worldPos.x, y1: worldPos.y }
       renderFrame()
     }
   }
 
   const stopDrawing = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    // Release the mouse lock
     e.currentTarget.releasePointerCapture(e.pointerId)
     
     if (!isDrawingRef.current) return
@@ -260,7 +303,6 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
     const tool = activeToolRef.current
 
-    // Finalize the shape
     if (SHAPE_TOOLS.includes(tool) && pendingShapeRef.current) {
       const drawData = { ...pendingShapeRef.current, clearSeq: clearSeqRef.current }
       drawingsRef.current.push(drawData)
@@ -273,7 +315,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   return (
     <div className="flex-1 w-full h-full bg-island border border-border rounded-island shadow-2xl relative overflow-hidden flex items-center justify-center group">
       
-      {/* Toolbar */}
+      {/* Left Toolbar */}
       <div className="absolute top-6 left-6 bg-black/60 border border-border backdrop-blur-xl p-1.5 rounded-2xl flex flex-col space-y-1 z-20 shadow-2xl">
         {tools.map((tool) => (
           <button
@@ -301,6 +343,17 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
         </button>
       </div>
 
+      {/* Right Toolbar for Download */}
+      <div className="absolute top-6 right-6 bg-black/60 border border-border backdrop-blur-xl p-1.5 rounded-2xl flex flex-col space-y-1 z-20 shadow-2xl">
+        <button
+          onClick={handleDownload}
+          className="p-2.5 rounded-xl transition-all text-gray-400 hover:text-white hover:bg-white/5"
+          title="Download Canvas"
+        >
+          <Download size={18} strokeWidth={2} />
+        </button>
+      </div>
+
       {/* Grid background */}
       <div
         ref={gridRef}
@@ -312,10 +365,37 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
         }}
       />
 
+      {/* Floating Text Input overlay */}
+      {textInput && (
+        <input
+          autoFocus
+          type="text"
+          value={textInput.text}
+          onChange={(e) => setTextInput({ ...textInput, text: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') saveText()
+          }}
+          onBlur={saveText} // Saves if the user clicks away
+          className="absolute z-50 bg-transparent text-white outline-none placeholder-gray-400"
+          placeholder="Type..."
+          style={{
+            // Maps the infinite world coordinates back to screen pixels perfectly!
+            left: textInput.x * cameraRef.current.z + cameraRef.current.x,
+            top: textInput.y * cameraRef.current.z + cameraRef.current.y,
+            fontSize: `${24 * cameraRef.current.z}px`,
+            borderBottom: '1px dashed #555'
+          }}
+        />
+      )}
+
       <canvas
         ref={canvasRef}
         className="w-full h-full absolute inset-0 z-10 touch-none"
-        style={{ cursor: activeTool === 'Select' ? 'grab' : (DRAWING_TOOLS.includes(activeTool) ? 'crosshair' : 'default') }}
+        style={{ 
+          cursor: activeTool === 'Select' 
+            ? 'grab' 
+            : (activeTool === 'Type' ? 'text' : (DRAWING_TOOLS.includes(activeTool) ? 'crosshair' : 'default')) 
+        }}
         onPointerDown={startDrawing}
         onPointerMove={draw}
         onPointerUp={stopDrawing}
