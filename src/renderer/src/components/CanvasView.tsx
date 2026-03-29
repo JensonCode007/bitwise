@@ -19,6 +19,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
   const isDrawingRef   = useRef(false)
   const activeToolRef  = useRef('Pencil')
   const lastPosRef     = useRef({ x: 0, y: 0 })
+  const clearSeqRef    = useRef(0)
 
   const [activeTool, setActiveTool] = useState('Pencil')
   const setTool = (tool: string) => {
@@ -114,6 +115,7 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     pendingShapeRef.current = null
     renderFrame()
     socketRef.current?.emit('clear-canvas', { roomId })
+    // clearSeqRef will be updated when canvas-cleared arrives from server
   }
 
   // ─── Effect 1: Socket ────────────────────────────────────────────────────────
@@ -123,17 +125,21 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
     socket.emit('join-room', { roomId, userName })
 
-    socket.on('load-canvas', (history: any[]) => {
-      drawingsRef.current = history
+    socket.on('load-canvas', ({ drawings, clearSeq }: { drawings: any[]; clearSeq: number }) => {
+      clearSeqRef.current = clearSeq
+      drawingsRef.current = drawings
       renderFrame()
     })
 
     socket.on('receive-draw', (drawData: any) => {
+      // Discard draws that belong to a cleared generation
+      if ((drawData.clearSeq ?? 0) < clearSeqRef.current) return
       drawingsRef.current.push(drawData)
       renderFrame()
     })
 
-    socket.on('canvas-cleared', () => {
+    socket.on('canvas-cleared', ({ clearSeq }: { clearSeq: number }) => {
+      clearSeqRef.current = clearSeq
       drawingsRef.current = []
       pendingShapeRef.current = null
       renderFrame()
@@ -226,7 +232,14 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
     const worldPos = getWorldPos(offsetX, offsetY)
 
     if (tool === 'Pencil') {
-      const drawData = { tool: 'Pencil', x0: lastPosRef.current.x, y0: lastPosRef.current.y, x1: worldPos.x, y1: worldPos.y }
+      const drawData = {
+        tool: 'Pencil',
+        x0: lastPosRef.current.x,
+        y0: lastPosRef.current.y,
+        x1: worldPos.x,
+        y1: worldPos.y,
+        clearSeq: clearSeqRef.current
+      }
       drawingsRef.current.push(drawData)
       socketRef.current?.emit('draw-action', { roomId, drawData })
       lastPosRef.current = worldPos
@@ -249,8 +262,9 @@ export const CanvasView = ({ roomId = 'hackathon-room', userName = 'Dev' }) => {
 
     // Finalize the shape
     if (SHAPE_TOOLS.includes(tool) && pendingShapeRef.current) {
-      drawingsRef.current.push(pendingShapeRef.current)
-      socketRef.current?.emit('draw-action', { roomId, drawData: pendingShapeRef.current })
+      const drawData = { ...pendingShapeRef.current, clearSeq: clearSeqRef.current }
+      drawingsRef.current.push(drawData)
+      socketRef.current?.emit('draw-action', { roomId, drawData })
       pendingShapeRef.current = null
       renderFrame()
     }
