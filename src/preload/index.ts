@@ -203,63 +203,6 @@ const api = {
       }
     },
 
-    sendFileContent: (roomId: string, filePath: string, content: string) => {
-      if (socket && socket.connected) {
-        socket.emit('file-content', { roomId, filePath, content })
-      }
-    },
-
-    onFileContent: (callback: (data: { filePath: string; content: string }) => void) => {
-      if (socket) {
-        socket.on('file-content', callback)
-        return () => socket.off('file-content', callback)
-      }
-      return () => {}
-    },
-
-    onAllFileContents: (callback: (contents: [string, string][]) => void) => {
-      if (socket) {
-        socket.on('all-file-contents', (contents) => {
-          console.log('Received all-file-contents:', contents.length)
-          callback(contents)
-        })
-        return () => socket.off('all-file-contents', callback)
-      }
-      return () => {}
-    },
-
-    requestAllFiles: (roomId: string) => {
-      if (socket && socket.connected) {
-        socket.emit('request-all-files', { roomId })
-      }
-    },
-
-    sendCursorChange: (
-      roomId: string,
-      filePath: string,
-      position: { lineNumber: number; column: number },
-      userName: string
-    ) => {
-      if (socket && socket.connected) {
-        socket.emit('cursor-change', { roomId, filePath, position, userName })
-      }
-    },
-
-    onCursorUpdate: (
-      callback: (data: {
-        userId: string
-        userName: string
-        filePath: string
-        position: { lineNumber: number; column: number }
-      }) => void
-    ) => {
-      if (socket) {
-        socket.on('cursor-update', callback)
-        return () => socket.off('cursor-update', callback)
-      }
-      return () => {}
-    },
-
     onChatMessage: (callback: (message: any) => void) => {
       if (socket) {
         socket.on('chat-message', callback)

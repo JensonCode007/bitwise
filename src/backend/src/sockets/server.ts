@@ -1,6 +1,9 @@
 import express from 'express'
 import http from 'http'
+import { WebSocketServer } from 'ws'
 import { Server, Socket } from 'socket.io'
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { setupWSConnection } = require('y-websocket/bin/utils')
 
 const app = express()
 const server = http.createServer(app)
@@ -30,9 +33,9 @@ interface Room {
   changes: FileChange[]
   projectPath?: string
   fileTree?: any[]
-  fileContents: Map<string, string>
   messages: ChatMessage[]
   drawings: any[] // whiteboard elements
+  clearSeq: number // monotonically-increasing clear generation
 }
 
 interface SocketData {
@@ -85,7 +88,7 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
         changes: [],
         messages: [],
         drawings: [],
-        fileContents: new Map()
+        clearSeq: 0
       })
     }
 
@@ -94,52 +97,8 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 
     socket.to(roomId).emit('user-joined', { userId: socket.id, userName })
     socket.emit('room-users', Array.from(room.users.values()))
-    socket.emit('load-canvas', room.drawings)
-
-    if (room.fileContents.size > 0) {
-      console.log('Sending all-file-contents to new user, count:', room.fileContents.size)
-      socket.emit('all-file-contents', Array.from(room.fileContents.entries()))
-    }
+    socket.emit('load-canvas', { drawings: room.drawings, clearSeq: room.clearSeq })
   })
-
-  socket.on('request-all-files', ({ roomId }: { roomId: string }) => {
-    console.log('Received request-all-files for room:', roomId)
-    if (!rooms.has(roomId)) {
-      console.log('Room not found:', roomId)
-      return
-    }
-    const room = rooms.get(roomId)!
-    console.log('Room fileContents size:', room.fileContents.size)
-    if (room.fileContents.size > 0) {
-      console.log('Responding to request-all-files, count:', room.fileContents.size)
-      socket.emit('all-file-contents', Array.from(room.fileContents.entries()))
-    } else {
-      console.log('No files in room, room.fileTree:', room.fileTree?.length || 0)
-    }
-  })
-
-  socket.on(
-    'cursor-change',
-    ({
-      roomId,
-      filePath,
-      position,
-      userName
-    }: {
-      roomId: string
-      filePath: string
-      position: { lineNumber: number; column: number }
-      userName: string
-    }) => {
-      if (!rooms.has(roomId)) return
-      socket.to(roomId).emit('cursor-update', {
-        userId: socket.id,
-        userName,
-        filePath,
-        position
-      })
-    }
-  )
 
   socket.on(
     'code-change',
@@ -240,18 +199,6 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
     }
   )
 
-  socket.on(
-    'file-content',
-    ({ roomId, filePath, content }: { roomId: string; filePath: string; content: string }) => {
-      console.log('Received file-content:', filePath, 'content length:', content.length)
-      if (!rooms.has(roomId)) return
-      const room = rooms.get(roomId)!
-      room.fileContents.set(filePath, content)
-      console.log('Room now has', room.fileContents.size, 'files')
-      socket.to(roomId).emit('file-content', { filePath, content })
-    }
-  )
-
   socket.on('get-project', ({ roomId }: { roomId: string }) => {
     if (!rooms.has(roomId)) return
     const room = rooms.get(roomId)!
@@ -295,6 +242,8 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
   socket.on('draw-action', ({ roomId, drawData }: { roomId: string; drawData: any }) => {
     if (!rooms.has(roomId)) return
     const room = rooms.get(roomId)!
+    // Reject draws that belong to a previous clear generation
+    if ((drawData.clearSeq ?? 0) < room.clearSeq) return
     room.drawings.push(drawData)
     socket.to(roomId).emit('receive-draw', drawData)
   })
@@ -302,8 +251,10 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
   socket.on('clear-canvas', ({ roomId }: { roomId: string }) => {
     if (!rooms.has(roomId)) return
     const room = rooms.get(roomId)!
+    room.clearSeq += 1
     room.drawings = []
-    socket.to(roomId).emit('canvas-cleared')
+    // Broadcast to all including sender so every client updates their clearSeq
+    io.to(roomId).emit('canvas-cleared', { clearSeq: room.clearSeq })
   })
 
   socket.on(
@@ -391,4 +342,22 @@ io.on('connection', (socket: Socket<any, any, any, SocketData>) => {
 const PORT = 5002
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`)
+})
+
+// ── Yjs WebSocket relay on port 5003 ─────────────────────────────────────────
+// Acts as a simple relay — Yjs handles all CRDT merge logic client-side
+const yjsHttpServer = http.createServer((_req, res) => {
+  res.writeHead(200)
+  res.end('Yjs WS relay')
+})
+
+const wss = new WebSocketServer({ server: yjsHttpServer })
+
+wss.on('connection', (ws, req) => {
+  setupWSConnection(ws, req)
+})
+
+const YJS_PORT = 5003
+yjsHttpServer.listen(YJS_PORT, () => {
+  console.log(`Yjs WebSocket relay listening on port ${YJS_PORT}`)
 })
