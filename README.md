@@ -3,8 +3,6 @@
 Bitwise is a desktop collaborative codespace built with **Electron**, **React**, and **TypeScript**.  
 It provides a modern editor experience powered by Monaco, real‑time collaboration via Yjs, and a connected backend for session management and persistence.
 
-> This is a fork of [`harryfrzz/bitwise`](https://github.com/harryfrzz/bitwise).
-
 ---
 
 ## Features
